@@ -188,6 +188,7 @@ export default function ToonvoEditor() {
     if (typeof window === "undefined") return;
     const on = () => setOnline(true);
     const off = () => setOnline(false);
+    setOnline(navigator.onLine);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     const bip = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
