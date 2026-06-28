@@ -168,7 +168,7 @@ export default function ToonvoEditor() {
   const [redoStack, setRedoStack] = useState<{ frame: number; layer: number; image: ImageData; label: string }[]>([]);
   const [historyLabels, setHistoryLabels] = useState<string[]>([]);
 
-  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [online, setOnline] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   const displayRef = useRef<HTMLCanvasElement>(null);
@@ -188,6 +188,7 @@ export default function ToonvoEditor() {
     if (typeof window === "undefined") return;
     const on = () => setOnline(true);
     const off = () => setOnline(false);
+    setOnline(navigator.onLine);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     const bip = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
