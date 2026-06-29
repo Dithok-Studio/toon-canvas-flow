@@ -22,6 +22,7 @@ interface Frame {
   duration: number;
   layers: Layer[];
   activeLayer: number;
+  bg: string | null; // null = transparent
 }
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
