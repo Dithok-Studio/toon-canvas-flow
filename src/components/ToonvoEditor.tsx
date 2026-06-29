@@ -160,6 +160,7 @@ export default function ToonvoEditor() {
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [fitOnce, setFitOnce] = useState(0);
 
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(true);
@@ -172,8 +173,17 @@ export default function ToonvoEditor() {
   const [online, setOnline] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
 
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const [alpha, setAlpha] = useState(1);
+
+  const spaceDownRef = useRef(false);
+  const panModeRef = useRef(false);
+
   const displayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef({ cssW: 0, cssH: 0, dpr: 1, scale: 1, offX: 0, offY: 0 });
   const drawingRef = useRef<{
     active: boolean; lastX: number; lastY: number; startX: number; startY: number;
     snapshot?: ImageData; pts: { x: number; y: number; p: number }[];
