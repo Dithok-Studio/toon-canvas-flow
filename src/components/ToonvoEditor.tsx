@@ -972,18 +972,56 @@ export default function ToonvoEditor() {
 
         {/* Canvas */}
         <div className="center">
-          <div ref={containerRef} className="canvasarea">
+          <div ref={containerRef} className="canvasarea" style={{ position: "relative" }}>
             <canvas
               ref={displayRef}
               className="display"
-              style={{ touchAction: "none", cursor: tool === "move" ? "grab" : "crosshair" }}
+              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDownRef.current) }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              onWheel={(e) => { e.preventDefault(); setZoom(z => Math.max(0.1, Math.min(8, z * (e.deltaY < 0 ? 1.1 : 0.9)))); }}
+              onPointerLeave={onPointerLeave}
+              onWheel={onWheel}
             />
+            {cursorPos.visible && shouldShowBrushCursor(tool) && (
+              <div
+                style={{
+                  position: "absolute", pointerEvents: "none",
+                  left: cursorPos.x, top: cursorPos.y,
+                  width: Math.max(4, size * viewRef.current.scale),
+                  height: Math.max(4, size * viewRef.current.scale),
+                  transform: "translate(-50%, -50%)",
+                  borderRadius: "50%",
+                  border: `1.5px solid ${tool.startsWith("eraser") ? "#ff4d4d" : "#ffffff"}`,
+                  boxShadow: "0 0 0 1px #000, inset 0 0 0 1px #000",
+                }}
+              >
+                <div style={{ position: "absolute", left: "50%", top: "50%", width: 2, height: 2, background: "#fff", boxShadow: "0 0 0 1px #000", transform: "translate(-50%,-50%)" }} />
+              </div>
+            )}
           </div>
+
+          {/* Status bar */}
+          <div className="statusbar" style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 10px", background: "#0f0f1c", borderTop: "1px solid #222", fontSize: 12, color: "#aaa" }}>
+            <button onClick={() => setZoom(z => Math.max(0.05, z / 1.2))} title="Zoom out">−</button>
+            <select value={Math.round(zoom * 100)} onChange={(e) => setZoom(+e.target.value / 100)} style={{ background: "#1a1a2e", color: "#fff", border: "1px solid #333" }}>
+              {[5,10,25,50,75,100,125,150,200,400,800,1600,2000].map(z => <option key={z} value={z}>{z}%</option>)}
+            </select>
+            <button onClick={() => setZoom(z => Math.min(20, z * 1.2))} title="Zoom in">+</button>
+            <button onClick={fitToScreen} title="Fit to screen (Ctrl+Shift+F)">⛶ Fit</button>
+            <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="100% (Ctrl+0)">1:1</button>
+            <span style={{ marginLeft: 12 }}>BG:</span>
+            <button onClick={() => setFrameBg("#ffffff")} style={{ background: "#fff", width: 22, height: 22, border: "1px solid #444" }} title="White" />
+            <button onClick={() => setFrameBg("#000000")} style={{ background: "#000", width: 22, height: 22, border: "1px solid #444" }} title="Black" />
+            <button onClick={() => setFrameBg(null)} style={{ background: "repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 50%/12px 12px", width: 22, height: 22, border: "1px solid #444" }} title="Transparent" />
+            <input type="color" onChange={(e) => setFrameBg(e.target.value)} title="Custom bg" style={{ width: 28, height: 22, padding: 0, background: "transparent", border: "1px solid #444" }} />
+            <div style={{ flex: 1 }} />
+            <span>Tool: {tool}</span>
+            <span>Size: {size}</span>
+            <span>Zoom: {Math.round(zoom * 100)}%</span>
+          </div>
+
 
           {/* Timeline */}
           <div className="timeline">
