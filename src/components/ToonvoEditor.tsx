@@ -441,16 +441,19 @@ export default function ToonvoEditor() {
     });
   };
 
-  // ------------- Coord transform -------------
+  // ------------- Coord transform (CSS px -> canvas px) -------------
   const eventToCanvas = (e: { clientX: number; clientY: number }) => {
     const disp = displayRef.current!;
     const rect = disp.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
-    const scale = Math.min(disp.width / dims.w, disp.height / dims.h) * zoom;
-    const offX = (disp.width - dims.w * scale) / 2 + pan.x;
-    const offY = (disp.height - dims.h * scale) / 2 + pan.y;
-    return { x: (px - offX) / scale, y: (py - offY) / scale };
+    const v = viewRef.current;
+    return { x: (px - v.offX) / v.scale, y: (py - v.offY) / v.scale };
+  };
+  const eventToCss = (e: { clientX: number; clientY: number }) => {
+    const disp = displayRef.current!;
+    const rect = disp.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
   // ------------- Stroke drawing -------------
