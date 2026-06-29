@@ -22,6 +22,7 @@ interface Frame {
   duration: number;
   layers: Layer[];
   activeLayer: number;
+  bg: string | null; // null = transparent
 }
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
@@ -81,8 +82,8 @@ function makeLayer(w: number, h: number, name: string): Layer {
   return { id: uid(), name, visible: true, locked: false, opacity: 1, blend: "normal", canvas: makeCanvas(w, h) };
 }
 
-function makeFrame(w: number, h: number): Frame {
-  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0 };
+function makeFrame(w: number, h: number, bg: string | null = "#ffffff"): Frame {
+  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -159,6 +160,7 @@ export default function ToonvoEditor() {
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [fitOnce, setFitOnce] = useState(0);
 
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(true);
@@ -171,8 +173,18 @@ export default function ToonvoEditor() {
   const [online, setOnline] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
 
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const [alpha, setAlpha] = useState(1);
+
+  const spaceDownRef = useRef(false);
+  const panModeRef = useRef(false);
+  const saveNowRef = useRef<(() => void) | null>(null);
+
   const displayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef({ cssW: 0, cssH: 0, dpr: 1, scale: 1, offX: 0, offY: 0 });
   const drawingRef = useRef<{
     active: boolean; lastX: number; lastY: number; startX: number; startY: number;
     snapshot?: ImageData; pts: { x: number; y: number; p: number }[];
@@ -203,32 +215,59 @@ export default function ToonvoEditor() {
     };
   }, []);
 
-  // Composite render
+  // Composite render (DPR aware, all math in CSS pixels)
   const render = useCallback(() => {
     const disp = displayRef.current;
-    if (!disp || frames.length === 0) return;
+    const cont = containerRef.current;
+    if (!disp || !cont || frames.length === 0) return;
     const ctx = disp.getContext("2d")!;
-    ctx.save();
+    const r = cont.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(100, r.width);
+    const cssH = Math.max(100, r.height);
+    const pw = Math.round(cssW * dpr);
+    const ph = Math.round(cssH * dpr);
+    if (disp.width !== pw) disp.width = pw;
+    if (disp.height !== ph) disp.height = ph;
+    disp.style.width = cssW + "px";
+    disp.style.height = cssH + "px";
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(0, 0, disp.width, disp.height);
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, pw, ph);
 
-    const scale = Math.min(disp.width / dims.w, disp.height / dims.h) * zoom;
-    const offX = (disp.width - dims.w * scale) / 2 + pan.x;
-    const offY = (disp.height - dims.h * scale) / 2 + pan.y;
-    ctx.setTransform(scale, 0, 0, scale, offX, offY);
+    const fitScale = Math.min(cssW / dims.w, cssH / dims.h);
+    const scale = fitScale * zoom;
+    const offX = (cssW - dims.w * scale) / 2 + pan.x;
+    const offY = (cssH - dims.h * scale) / 2 + pan.y;
+    viewRef.current = { cssW, cssH, dpr, scale, offX, offY };
 
-    // checker bg
-    ctx.fillStyle = "#1a1a2e";
-    ctx.fillRect(0, 0, dims.w, dims.h);
+    // Set transform: CSS px -> device px, then translate+scale to canvas-local px
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr);
 
-    // Onion skin previous
+    // Background (per-frame)
+    const cur = frames[currentFrame];
+    if (cur) {
+      if (cur.bg) {
+        ctx.fillStyle = cur.bg;
+        ctx.fillRect(0, 0, dims.w, dims.h);
+      } else {
+        // transparent checker
+        const s = 16;
+        for (let yy = 0; yy < dims.h; yy += s) {
+          for (let xx = 0; xx < dims.w; xx += s) {
+            ctx.fillStyle = ((xx / s + yy / s) & 1) ? "#bfbfbf" : "#ffffff";
+            ctx.fillRect(xx, yy, s, s);
+          }
+        }
+      }
+    }
+
     if (onion) {
       for (let i = 1; i <= onionBefore; i++) {
         const f = frames[currentFrame - i];
         if (!f) break;
         ctx.globalAlpha = onionOpacity * (1 - (i - 1) * 0.2);
-        ctx.fillStyle = "#ff5555";
         const tmp = makeCanvas(dims.w, dims.h);
         const tctx = tmp.getContext("2d")!;
         f.layers.forEach((l) => {
@@ -237,7 +276,6 @@ export default function ToonvoEditor() {
           tctx.globalCompositeOperation = blendCss(l.blend);
           tctx.drawImage(l.canvas, 0, 0);
         });
-        // tint red
         tctx.globalCompositeOperation = "source-in";
         tctx.fillStyle = "#ff3333";
         tctx.fillRect(0, 0, dims.w, dims.h);
@@ -263,9 +301,8 @@ export default function ToonvoEditor() {
       ctx.globalAlpha = 1;
     }
 
-    const frame = frames[currentFrame];
-    if (frame) {
-      frame.layers.forEach((l) => {
+    if (cur) {
+      cur.layers.forEach((l) => {
         if (!l.visible) return;
         ctx.globalAlpha = l.opacity;
         ctx.globalCompositeOperation = blendCss(l.blend);
@@ -287,29 +324,29 @@ export default function ToonvoEditor() {
       }
     }
 
-    // border
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-    ctx.restore();
   }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid]);
 
-  // Resize display to container
+  // Resize observer
   useEffect(() => {
-    const fit = () => {
-      const c = containerRef.current; const d = displayRef.current;
-      if (!c || !d) return;
-      const r = c.getBoundingClientRect();
-      d.width = Math.max(100, Math.floor(r.width));
-      d.height = Math.max(100, Math.floor(r.height));
-      render();
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+    const c = containerRef.current;
+    if (!c) return;
+    const ro = new ResizeObserver(() => render());
+    ro.observe(c);
+    window.addEventListener("resize", render);
+    return () => { ro.disconnect(); window.removeEventListener("resize", render); };
   }, [render]);
 
   useEffect(() => { render(); }, [render]);
+
+  // Fit canvas to screen helper
+  const fitToScreen = useCallback(() => {
+    setZoom(1); setPan({ x: 0, y: 0 });
+    setFitOnce((n) => n + 1);
+  }, []);
+  useEffect(() => { if (fitOnce) render(); }, [fitOnce, render]);
 
   // Build thumbnail for a frame
   const buildThumb = useCallback((idx: number) => {
@@ -405,16 +442,40 @@ export default function ToonvoEditor() {
     });
   };
 
-  // ------------- Coord transform -------------
+  // ------------- Coord transform (CSS px -> canvas px) -------------
   const eventToCanvas = (e: { clientX: number; clientY: number }) => {
     const disp = displayRef.current!;
     const rect = disp.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
-    const scale = Math.min(disp.width / dims.w, disp.height / dims.h) * zoom;
-    const offX = (disp.width - dims.w * scale) / 2 + pan.x;
-    const offY = (disp.height - dims.h * scale) / 2 + pan.y;
-    return { x: (px - offX) / scale, y: (py - offY) / scale };
+    const v = viewRef.current;
+    return { x: (px - v.offX) / v.scale, y: (py - v.offY) / v.scale };
+  };
+  const eventToCss = (e: { clientX: number; clientY: number }) => {
+    const disp = displayRef.current!;
+    const rect = disp.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const setFrameBg = (bg: string | null) => {
+    setFrames((fs) => {
+      const copy = fs.slice();
+      const f = copy[currentFrame];
+      if (!f) return fs;
+      copy[currentFrame] = { ...f, bg };
+      return copy;
+    });
+  };
+
+  const getToolCursor = (t: Tool, spaceDown: boolean): string => {
+    if (spaceDown) return "grab";
+    if (t === "move") return "grab";
+    if (t === "select") return "crosshair";
+    if (t === "eyedropper") return "crosshair";
+    return "none";
+  };
+  const shouldShowBrushCursor = (t: Tool) => {
+    return !["move", "select", "eyedropper", "bucket"].includes(t);
   };
 
   // ------------- Stroke drawing -------------
@@ -501,6 +562,17 @@ export default function ToonvoEditor() {
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    const cssP = eventToCss(e);
+    setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+
+    // Pan: space-hold, middle-mouse, or move tool
+    const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
+    if (isPan) {
+      panModeRef.current = true;
+      drawingRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, pts: [] };
+      return;
+    }
+
     const { x, y } = eventToCanvas(e);
     const frame = frames[currentFrame];
     if (!frame) return;
@@ -509,12 +581,10 @@ export default function ToonvoEditor() {
 
     if (tool === "eyedropper") {
       const ctx = layer.canvas.getContext("2d")!;
-      const data = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-      if (data[3] > 0) updateColor(rgbToHex(data[0], data[1], data[2]));
-      return;
-    }
-    if (tool === "move") {
-      drawingRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, pts: [] };
+      if (x >= 0 && y >= 0 && x < layer.canvas.width && y < layer.canvas.height) {
+        const data = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+        if (data[3] > 0) updateColor(rgbToHex(data[0], data[1], data[2]));
+      }
       return;
     }
     if (layer.locked) return;
@@ -552,25 +622,28 @@ export default function ToonvoEditor() {
       ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     } else {
-      // dot
       drawWithSymmetry(layer, tool, x, y, x + 0.01, y + 0.01, e.pressure || 0.5);
     }
     render();
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const cssP = eventToCss(e);
+    setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+
     const d = drawingRef.current;
     if (!d.active) return;
-    const frame = frames[currentFrame];
-    if (!frame) return;
-    const layer = frame.layers[frame.activeLayer];
 
-    if (tool === "move") {
+    if (panModeRef.current) {
       setPan((p) => ({ x: p.x + (e.clientX - d.lastX), y: p.y + (e.clientY - d.lastY) }));
       drawingRef.current.lastX = e.clientX;
       drawingRef.current.lastY = e.clientY;
       return;
     }
+
+    const frame = frames[currentFrame];
+    if (!frame) return;
+    const layer = frame.layers[frame.activeLayer];
     if (!layer || layer.locked) return;
 
     const { x, y } = eventToCanvas(e);
@@ -592,7 +665,6 @@ export default function ToonvoEditor() {
       return;
     }
 
-    // Smoothing
     let nx = x, ny = y;
     if (smoothing > 0) {
       const s = smoothing / 10;
@@ -620,11 +692,35 @@ export default function ToonvoEditor() {
   const onPointerUp = (e: React.PointerEvent) => {
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
+    panModeRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
       setRecentColors((r) => [color, ...r.filter(c => c !== color)].slice(0, 20));
     }
+  };
+  const onPointerLeave = () => setCursorPos((c) => ({ ...c, visible: false }));
+
+  // Wheel zoom centered on cursor
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const cssP = eventToCss(e);
+    const v = viewRef.current;
+    const factor = (e.ctrlKey ? 1.2 : 1.1);
+    const dir = e.deltaY < 0 ? factor : 1 / factor;
+    const newZoom = Math.max(0.05, Math.min(20, zoom * dir));
+    // Keep canvas point under cursor stationary
+    // worldX = (cssP.x - offX)/scale; want worldX same after.
+    // newScale = fitScale * newZoom; newOffX = cssP.x - worldX * newScale
+    // newPan.x = newOffX - (cssW - dims.w*newScale)/2
+    const fitScale = Math.min(v.cssW / dims.w, v.cssH / dims.h);
+    const newScale = fitScale * newZoom;
+    const worldX = (cssP.x - v.offX) / v.scale;
+    const worldY = (cssP.y - v.offY) / v.scale;
+    const newOffX = cssP.x - worldX * newScale;
+    const newOffY = cssP.y - worldY * newScale;
+    setZoom(newZoom);
+    setPan({ x: newOffX - (v.cssW - dims.w * newScale) / 2, y: newOffY - (v.cssH - dims.h * newScale) / 2 });
   };
 
   const updateColor = (c: string) => {
@@ -716,12 +812,18 @@ export default function ToonvoEditor() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
-      if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
+      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
+      if (e.key === " " && !inField) { e.preventDefault(); spaceDownRef.current = true; return; }
+      if (inField) return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
         if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        if (e.key === "s") { e.preventDefault(); saveNow(); return; }
+        if (e.key === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
         if (e.key === "n") { e.preventDefault(); setShowNew(true); return; }
+        if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
+        if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(z => Math.max(0.05, z / 1.2)); return; }
+        if (e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); return; }
+        if (e.key === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
         return;
       }
       const k = e.key.toLowerCase();
@@ -730,14 +832,19 @@ export default function ToonvoEditor() {
         e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "line", s: "select", v: "move",
       };
       if (map[k]) { setTool(map[k]); return; }
-      if (e.key === " ") { e.preventDefault(); setPlaying(p => !p); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
       if (e.altKey) setTool("eyedropper");
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") spaceDownRef.current = false;
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
+    window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // ------------- Persistence -------------
   const serialize = useCallback((): SavedProject => {
@@ -761,6 +868,7 @@ export default function ToonvoEditor() {
     if (framesRef.current.length === 0) return;
     try { await saveProject(serialize()); } catch (e) { console.error(e); }
   }, [serialize]);
+  saveNowRef.current = saveNow;
 
   useEffect(() => {
     if (frames.length === 0) return;
@@ -790,7 +898,7 @@ export default function ToonvoEditor() {
         });
         layers.push(layer);
       }
-      loaded.push({ duration: f.duration, layers, activeLayer: 0 });
+      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: (f as { bg?: string | null }).bg ?? "#ffffff" });
     }
     setFrames(loaded);
     setCurrentFrame(0);
@@ -885,18 +993,56 @@ export default function ToonvoEditor() {
 
         {/* Canvas */}
         <div className="center">
-          <div ref={containerRef} className="canvasarea">
+          <div ref={containerRef} className="canvasarea" style={{ position: "relative" }}>
             <canvas
               ref={displayRef}
               className="display"
-              style={{ touchAction: "none", cursor: tool === "move" ? "grab" : "crosshair" }}
+              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDownRef.current) }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              onWheel={(e) => { e.preventDefault(); setZoom(z => Math.max(0.1, Math.min(8, z * (e.deltaY < 0 ? 1.1 : 0.9)))); }}
+              onPointerLeave={onPointerLeave}
+              onWheel={onWheel}
             />
+            {cursorPos.visible && shouldShowBrushCursor(tool) && (
+              <div
+                style={{
+                  position: "absolute", pointerEvents: "none",
+                  left: cursorPos.x, top: cursorPos.y,
+                  width: Math.max(4, size * viewRef.current.scale),
+                  height: Math.max(4, size * viewRef.current.scale),
+                  transform: "translate(-50%, -50%)",
+                  borderRadius: "50%",
+                  border: `1.5px solid ${tool.startsWith("eraser") ? "#ff4d4d" : "#ffffff"}`,
+                  boxShadow: "0 0 0 1px #000, inset 0 0 0 1px #000",
+                }}
+              >
+                <div style={{ position: "absolute", left: "50%", top: "50%", width: 2, height: 2, background: "#fff", boxShadow: "0 0 0 1px #000", transform: "translate(-50%,-50%)" }} />
+              </div>
+            )}
           </div>
+
+          {/* Status bar */}
+          <div className="statusbar" style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 10px", background: "#0f0f1c", borderTop: "1px solid #222", fontSize: 12, color: "#aaa" }}>
+            <button onClick={() => setZoom(z => Math.max(0.05, z / 1.2))} title="Zoom out">−</button>
+            <select value={Math.round(zoom * 100)} onChange={(e) => setZoom(+e.target.value / 100)} style={{ background: "#1a1a2e", color: "#fff", border: "1px solid #333" }}>
+              {[5,10,25,50,75,100,125,150,200,400,800,1600,2000].map(z => <option key={z} value={z}>{z}%</option>)}
+            </select>
+            <button onClick={() => setZoom(z => Math.min(20, z * 1.2))} title="Zoom in">+</button>
+            <button onClick={fitToScreen} title="Fit to screen (Ctrl+Shift+F)">⛶ Fit</button>
+            <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="100% (Ctrl+0)">1:1</button>
+            <span style={{ marginLeft: 12 }}>BG:</span>
+            <button onClick={() => setFrameBg("#ffffff")} style={{ background: "#fff", width: 22, height: 22, border: "1px solid #444" }} title="White" />
+            <button onClick={() => setFrameBg("#000000")} style={{ background: "#000", width: 22, height: 22, border: "1px solid #444" }} title="Black" />
+            <button onClick={() => setFrameBg(null)} style={{ background: "repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 50%/12px 12px", width: 22, height: 22, border: "1px solid #444" }} title="Transparent" />
+            <input type="color" onChange={(e) => setFrameBg(e.target.value)} title="Custom bg" style={{ width: 28, height: 22, padding: 0, background: "transparent", border: "1px solid #444" }} />
+            <div style={{ flex: 1 }} />
+            <span>Tool: {tool}</span>
+            <span>Size: {size}</span>
+            <span>Zoom: {Math.round(zoom * 100)}%</span>
+          </div>
+
 
           {/* Timeline */}
           <div className="timeline">
@@ -1039,6 +1185,7 @@ function cloneFrame(f: Frame, w: number, h: number): Frame {
   return {
     duration: f.duration,
     activeLayer: f.activeLayer,
+    bg: f.bg,
     layers: f.layers.map(l => {
       const c = makeCanvas(w, h);
       c.getContext("2d")!.drawImage(l.canvas, 0, 0);
