@@ -540,6 +540,17 @@ export default function ToonvoEditor() {
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    const cssP = eventToCss(e);
+    setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+
+    // Pan: space-hold, middle-mouse, or move tool
+    const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
+    if (isPan) {
+      panModeRef.current = true;
+      drawingRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, pts: [] };
+      return;
+    }
+
     const { x, y } = eventToCanvas(e);
     const frame = frames[currentFrame];
     if (!frame) return;
@@ -548,12 +559,10 @@ export default function ToonvoEditor() {
 
     if (tool === "eyedropper") {
       const ctx = layer.canvas.getContext("2d")!;
-      const data = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-      if (data[3] > 0) updateColor(rgbToHex(data[0], data[1], data[2]));
-      return;
-    }
-    if (tool === "move") {
-      drawingRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, pts: [] };
+      if (x >= 0 && y >= 0 && x < layer.canvas.width && y < layer.canvas.height) {
+        const data = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+        if (data[3] > 0) updateColor(rgbToHex(data[0], data[1], data[2]));
+      }
       return;
     }
     if (layer.locked) return;
@@ -591,25 +600,28 @@ export default function ToonvoEditor() {
       ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     } else {
-      // dot
       drawWithSymmetry(layer, tool, x, y, x + 0.01, y + 0.01, e.pressure || 0.5);
     }
     render();
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const cssP = eventToCss(e);
+    setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+
     const d = drawingRef.current;
     if (!d.active) return;
-    const frame = frames[currentFrame];
-    if (!frame) return;
-    const layer = frame.layers[frame.activeLayer];
 
-    if (tool === "move") {
+    if (panModeRef.current) {
       setPan((p) => ({ x: p.x + (e.clientX - d.lastX), y: p.y + (e.clientY - d.lastY) }));
       drawingRef.current.lastX = e.clientX;
       drawingRef.current.lastY = e.clientY;
       return;
     }
+
+    const frame = frames[currentFrame];
+    if (!frame) return;
+    const layer = frame.layers[frame.activeLayer];
     if (!layer || layer.locked) return;
 
     const { x, y } = eventToCanvas(e);
@@ -631,7 +643,6 @@ export default function ToonvoEditor() {
       return;
     }
 
-    // Smoothing
     let nx = x, ny = y;
     if (smoothing > 0) {
       const s = smoothing / 10;
@@ -659,11 +670,35 @@ export default function ToonvoEditor() {
   const onPointerUp = (e: React.PointerEvent) => {
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
+    panModeRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
       setRecentColors((r) => [color, ...r.filter(c => c !== color)].slice(0, 20));
     }
+  };
+  const onPointerLeave = () => setCursorPos((c) => ({ ...c, visible: false }));
+
+  // Wheel zoom centered on cursor
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const cssP = eventToCss(e);
+    const v = viewRef.current;
+    const factor = (e.ctrlKey ? 1.2 : 1.1);
+    const dir = e.deltaY < 0 ? factor : 1 / factor;
+    const newZoom = Math.max(0.05, Math.min(20, zoom * dir));
+    // Keep canvas point under cursor stationary
+    // worldX = (cssP.x - offX)/scale; want worldX same after.
+    // newScale = fitScale * newZoom; newOffX = cssP.x - worldX * newScale
+    // newPan.x = newOffX - (cssW - dims.w*newScale)/2
+    const fitScale = Math.min(v.cssW / dims.w, v.cssH / dims.h);
+    const newScale = fitScale * newZoom;
+    const worldX = (cssP.x - v.offX) / v.scale;
+    const worldY = (cssP.y - v.offY) / v.scale;
+    const newOffX = cssP.x - worldX * newScale;
+    const newOffY = cssP.y - worldY * newScale;
+    setZoom(newZoom);
+    setPan({ x: newOffX - (v.cssW - dims.w * newScale) / 2, y: newOffY - (v.cssH - dims.h * newScale) / 2 });
   };
 
   const updateColor = (c: string) => {
