@@ -796,7 +796,7 @@ export default function ToonvoEditor() {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
         if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        if (e.key === "s") { e.preventDefault(); saveNow(); return; }
+        if (e.key === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
         if (e.key === "n") { e.preventDefault(); setShowNew(true); return; }
         if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
         if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(z => Math.max(0.05, z / 1.2)); return; }
