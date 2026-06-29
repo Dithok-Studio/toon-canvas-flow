@@ -180,6 +180,7 @@ export default function ToonvoEditor() {
 
   const spaceDownRef = useRef(false);
   const panModeRef = useRef(false);
+  const saveNowRef = useRef<(() => void) | null>(null);
 
   const displayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
