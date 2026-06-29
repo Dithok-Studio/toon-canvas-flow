@@ -847,6 +847,7 @@ export default function ToonvoEditor() {
     if (framesRef.current.length === 0) return;
     try { await saveProject(serialize()); } catch (e) { console.error(e); }
   }, [serialize]);
+  saveNowRef.current = saveNow;
 
   useEffect(() => {
     if (frames.length === 0) return;
