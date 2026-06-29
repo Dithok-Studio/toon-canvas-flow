@@ -457,6 +457,27 @@ export default function ToonvoEditor() {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
+  const setFrameBg = (bg: string | null) => {
+    setFrames((fs) => {
+      const copy = fs.slice();
+      const f = copy[currentFrame];
+      if (!f) return fs;
+      copy[currentFrame] = { ...f, bg };
+      return copy;
+    });
+  };
+
+  const getToolCursor = (t: Tool, spaceDown: boolean): string => {
+    if (spaceDown) return "grab";
+    if (t === "move") return "grab";
+    if (t === "select") return "crosshair";
+    if (t === "eyedropper") return "crosshair";
+    return "none";
+  };
+  const shouldShowBrushCursor = (t: Tool) => {
+    return !["move", "select", "eyedropper", "bucket"].includes(t);
+  };
+
   // ------------- Stroke drawing -------------
   const applyStrokeStyle = (ctx: CanvasRenderingContext2D, t: Tool, pressure: number) => {
     ctx.strokeStyle = color;
