@@ -791,7 +791,7 @@ export default function ToonvoEditor() {
         });
         layers.push(layer);
       }
-      loaded.push({ duration: f.duration, layers, activeLayer: 0 });
+      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: (f as { bg?: string | null }).bg ?? "#ffffff" });
     }
     setFrames(loaded);
     setCurrentFrame(0);
