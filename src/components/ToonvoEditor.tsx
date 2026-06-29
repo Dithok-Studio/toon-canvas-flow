@@ -820,7 +820,8 @@ export default function ToonvoEditor() {
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
-  }, [undo, redo, saveNow, fitToScreen]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   // ------------- Persistence -------------
