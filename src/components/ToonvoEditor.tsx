@@ -214,32 +214,59 @@ export default function ToonvoEditor() {
     };
   }, []);
 
-  // Composite render
+  // Composite render (DPR aware, all math in CSS pixels)
   const render = useCallback(() => {
     const disp = displayRef.current;
-    if (!disp || frames.length === 0) return;
+    const cont = containerRef.current;
+    if (!disp || !cont || frames.length === 0) return;
     const ctx = disp.getContext("2d")!;
-    ctx.save();
+    const r = cont.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(100, r.width);
+    const cssH = Math.max(100, r.height);
+    const pw = Math.round(cssW * dpr);
+    const ph = Math.round(cssH * dpr);
+    if (disp.width !== pw) disp.width = pw;
+    if (disp.height !== ph) disp.height = ph;
+    disp.style.width = cssW + "px";
+    disp.style.height = cssH + "px";
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(0, 0, disp.width, disp.height);
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, pw, ph);
 
-    const scale = Math.min(disp.width / dims.w, disp.height / dims.h) * zoom;
-    const offX = (disp.width - dims.w * scale) / 2 + pan.x;
-    const offY = (disp.height - dims.h * scale) / 2 + pan.y;
-    ctx.setTransform(scale, 0, 0, scale, offX, offY);
+    const fitScale = Math.min(cssW / dims.w, cssH / dims.h);
+    const scale = fitScale * zoom;
+    const offX = (cssW - dims.w * scale) / 2 + pan.x;
+    const offY = (cssH - dims.h * scale) / 2 + pan.y;
+    viewRef.current = { cssW, cssH, dpr, scale, offX, offY };
 
-    // checker bg
-    ctx.fillStyle = "#1a1a2e";
-    ctx.fillRect(0, 0, dims.w, dims.h);
+    // Set transform: CSS px -> device px, then translate+scale to canvas-local px
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr);
 
-    // Onion skin previous
+    // Background (per-frame)
+    const cur = frames[currentFrame];
+    if (cur) {
+      if (cur.bg) {
+        ctx.fillStyle = cur.bg;
+        ctx.fillRect(0, 0, dims.w, dims.h);
+      } else {
+        // transparent checker
+        const s = 16;
+        for (let yy = 0; yy < dims.h; yy += s) {
+          for (let xx = 0; xx < dims.w; xx += s) {
+            ctx.fillStyle = ((xx / s + yy / s) & 1) ? "#bfbfbf" : "#ffffff";
+            ctx.fillRect(xx, yy, s, s);
+          }
+        }
+      }
+    }
+
     if (onion) {
       for (let i = 1; i <= onionBefore; i++) {
         const f = frames[currentFrame - i];
         if (!f) break;
         ctx.globalAlpha = onionOpacity * (1 - (i - 1) * 0.2);
-        ctx.fillStyle = "#ff5555";
         const tmp = makeCanvas(dims.w, dims.h);
         const tctx = tmp.getContext("2d")!;
         f.layers.forEach((l) => {
@@ -248,7 +275,6 @@ export default function ToonvoEditor() {
           tctx.globalCompositeOperation = blendCss(l.blend);
           tctx.drawImage(l.canvas, 0, 0);
         });
-        // tint red
         tctx.globalCompositeOperation = "source-in";
         tctx.fillStyle = "#ff3333";
         tctx.fillRect(0, 0, dims.w, dims.h);
@@ -274,9 +300,8 @@ export default function ToonvoEditor() {
       ctx.globalAlpha = 1;
     }
 
-    const frame = frames[currentFrame];
-    if (frame) {
-      frame.layers.forEach((l) => {
+    if (cur) {
+      cur.layers.forEach((l) => {
         if (!l.visible) return;
         ctx.globalAlpha = l.opacity;
         ctx.globalCompositeOperation = blendCss(l.blend);
@@ -298,29 +323,29 @@ export default function ToonvoEditor() {
       }
     }
 
-    // border
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-    ctx.restore();
   }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid]);
 
-  // Resize display to container
+  // Resize observer
   useEffect(() => {
-    const fit = () => {
-      const c = containerRef.current; const d = displayRef.current;
-      if (!c || !d) return;
-      const r = c.getBoundingClientRect();
-      d.width = Math.max(100, Math.floor(r.width));
-      d.height = Math.max(100, Math.floor(r.height));
-      render();
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+    const c = containerRef.current;
+    if (!c) return;
+    const ro = new ResizeObserver(() => render());
+    ro.observe(c);
+    window.addEventListener("resize", render);
+    return () => { ro.disconnect(); window.removeEventListener("resize", render); };
   }, [render]);
 
   useEffect(() => { render(); }, [render]);
+
+  // Fit canvas to screen helper
+  const fitToScreen = useCallback(() => {
+    setZoom(1); setPan({ x: 0, y: 0 });
+    setFitOnce((n) => n + 1);
+  }, []);
+  useEffect(() => { if (fitOnce) render(); }, [fitOnce, render]);
 
   // Build thumbnail for a frame
   const buildThumb = useCallback((idx: number) => {
