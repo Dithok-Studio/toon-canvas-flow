@@ -790,12 +790,18 @@ export default function ToonvoEditor() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
-      if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
+      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
+      if (e.key === " " && !inField) { e.preventDefault(); spaceDownRef.current = true; return; }
+      if (inField) return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
         if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); return; }
         if (e.key === "s") { e.preventDefault(); saveNow(); return; }
         if (e.key === "n") { e.preventDefault(); setShowNew(true); return; }
+        if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
+        if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(z => Math.max(0.05, z / 1.2)); return; }
+        if (e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); return; }
+        if (e.key === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
         return;
       }
       const k = e.key.toLowerCase();
@@ -804,14 +810,18 @@ export default function ToonvoEditor() {
         e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "line", s: "select", v: "move",
       };
       if (map[k]) { setTool(map[k]); return; }
-      if (e.key === " ") { e.preventDefault(); setPlaying(p => !p); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
       if (e.altKey) setTool("eyedropper");
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") spaceDownRef.current = false;
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
+    window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
+  }, [undo, redo, saveNow, fitToScreen]);
+
 
   // ------------- Persistence -------------
   const serialize = useCallback((): SavedProject => {
