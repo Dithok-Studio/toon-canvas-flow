@@ -82,8 +82,8 @@ function makeLayer(w: number, h: number, name: string): Layer {
   return { id: uid(), name, visible: true, locked: false, opacity: 1, blend: "normal", canvas: makeCanvas(w, h) };
 }
 
-function makeFrame(w: number, h: number): Frame {
-  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0 };
+function makeFrame(w: number, h: number, bg: string | null = "#ffffff"): Frame {
+  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
