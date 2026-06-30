@@ -537,6 +537,94 @@ export default function ToonvoEditor() {
     });
   };
 
+  const updateFrame = (idx: number, patch: Partial<Frame>) => {
+    setFrames((fs) => fs.map((f, i) => i === idx ? { ...f, ...patch } : f));
+  };
+  const updateBgImage = (patch: Partial<BgImage>, all = false) => {
+    setFrames((fs) => fs.map((f, i) => {
+      if (!all && i !== currentFrame) return f;
+      const cur = f.bgImage ?? { src: "", fit: "fill" as const, opacity: 1 };
+      return { ...f, bgImage: { ...cur, ...patch } };
+    }));
+  };
+  const importBgImage = (file: File) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      updateBgImage({ src, fit: "fill", opacity: 1 });
+      setTimeout(() => { buildThumb(currentFrame); render(); }, 50);
+    };
+    fr.readAsDataURL(file);
+  };
+  const applyBgToAll = () => {
+    const cur = frames[currentFrame]?.bgImage;
+    if (!cur) return;
+    setFrames(fs => fs.map(f => ({ ...f, bgImage: { ...cur } })));
+    setTimeout(() => framesRef.current.forEach((_, i) => buildThumb(i)), 50);
+  };
+  const clearBgImage = () => {
+    updateBgImage({ src: "" });
+    setFrames(fs => fs.map((f, i) => i === currentFrame ? { ...f, bgImage: null } : f));
+    setTimeout(() => buildThumb(currentFrame), 30);
+  };
+
+  // Reference images
+  const importRefImage = (file: File) => {
+    if (refImages.length >= 3) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      const w = Math.min(300, window.innerWidth - 40);
+      const x = Math.max(20, window.innerWidth - w - 320);
+      setRefImages(rs => [...rs, {
+        id: uid(), src, x, y: 80, w, h: w,
+        opacity: 1, flipH: false, flipV: false, minimized: false, zoom: 1,
+      }]);
+    };
+    fr.readAsDataURL(file);
+  };
+  const updateRefImage = (id: string, patch: Partial<RefImage>) => {
+    setRefImages(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r));
+  };
+  const removeRefImage = (id: string) => setRefImages(rs => rs.filter(r => r.id !== id));
+
+  // Audio
+  const TRACK_COLORS = ["#9b6cff", "#3aa7ff", "#43d18d"];
+  const importAudio = (file: File) => {
+    if (audioTracks.length >= 3) return;
+    if (file.size > 50 * 1024 * 1024) { alert("Audio max 50MB"); return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      const id = uid();
+      const audio = new Audio(src);
+      audioElsRef.current.set(id, audio);
+      audio.addEventListener("loadedmetadata", () => {
+        setAudioTracks(ts => ts.map(t => t.id === id ? { ...t, duration: audio.duration } : t));
+      });
+      const defaults = ["Music", "Voice", "Sound FX"];
+      setAudioTracks(ts => [...ts, {
+        id, name: defaults[ts.length] || file.name, src,
+        volume: 1, muted: false, solo: false,
+        offsetFrames: 0, trimStart: 0, trimEnd: 0,
+        loop: true, speed: 1,
+        color: TRACK_COLORS[ts.length] || "#888",
+        duration: 0,
+      }]);
+      setSelectedAudio(id);
+    };
+    fr.readAsDataURL(file);
+  };
+  const updateAudio = (id: string, patch: Partial<AudioTrack>) => {
+    setAudioTracks(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
+  };
+  const removeAudio = (id: string) => {
+    const a = audioElsRef.current.get(id);
+    if (a) { a.pause(); audioElsRef.current.delete(id); }
+    setAudioTracks(ts => ts.filter(t => t.id !== id));
+    if (selectedAudio === id) setSelectedAudio(null);
+  };
+
   const getToolCursor = (t: Tool, spaceDown: boolean): string => {
     if (spaceDown) return "grab";
     if (t === "move") return "grab";
