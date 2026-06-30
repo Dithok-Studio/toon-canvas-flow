@@ -1344,6 +1344,7 @@ function cloneFrame(f: Frame, w: number, h: number): Frame {
     duration: f.duration,
     activeLayer: f.activeLayer,
     bg: f.bg,
+    bgImage: f.bgImage ? { ...f.bgImage } : null,
     layers: f.layers.map(l => {
       const c = makeCanvas(w, h);
       c.getContext("2d")!.drawImage(l.canvas, 0, 0);
