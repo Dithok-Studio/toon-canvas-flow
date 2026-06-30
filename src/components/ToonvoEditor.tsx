@@ -113,7 +113,7 @@ function makeLayer(w: number, h: number, name: string): Layer {
 }
 
 function makeFrame(w: number, h: number, bg: string | null = "#ffffff"): Frame {
-  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg };
+  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg, bgImage: null };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
