@@ -291,6 +291,35 @@ export default function ToonvoEditor() {
           }
         }
       }
+      // Background image (per-frame, locked behind layers)
+      if (cur.bgImage && cur.bgImage.src) {
+        const cache = bgImgCacheRef.current;
+        let img = cache.get(cur.bgImage.src);
+        if (!img) {
+          img = new Image();
+          img.onload = () => render();
+          img.src = cur.bgImage.src;
+          cache.set(cur.bgImage.src, img);
+        }
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.save();
+          ctx.globalAlpha = cur.bgImage.opacity;
+          const iw = img.naturalWidth, ih = img.naturalHeight;
+          const cw = dims.w, ch = dims.h;
+          if (cur.bgImage.fit === "stretch") {
+            ctx.drawImage(img, 0, 0, cw, ch);
+          } else if (cur.bgImage.fit === "fill") {
+            const s = Math.max(cw / iw, ch / ih);
+            const dw = iw * s, dh = ih * s;
+            ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          } else {
+            const s = Math.min(cw / iw, ch / ih);
+            const dw = iw * s, dh = ih * s;
+            ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          }
+          ctx.restore();
+        }
+      }
     }
 
     if (onion) {
