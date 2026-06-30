@@ -1121,6 +1121,17 @@ export default function ToonvoEditor() {
     setCurrentFrame(0);
     setShowProjects(false); setShowNew(false);
     setThumbs({});
+    // Restore audio tracks
+    const at = (p as unknown as { audioTracks?: AudioTrack[] }).audioTracks;
+    if (at && Array.isArray(at)) {
+      audioElsRef.current.forEach(a => a.pause());
+      audioElsRef.current.clear();
+      at.forEach(t => audioElsRef.current.set(t.id, new Audio(t.src)));
+      setAudioTracks(at);
+    } else {
+      setAudioTracks([]);
+    }
+    setRefImages([]);
     setTimeout(() => loaded.forEach((_, i) => buildThumb(i)), 50);
   };
 
