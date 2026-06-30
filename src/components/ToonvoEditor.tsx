@@ -1057,7 +1057,7 @@ export default function ToonvoEditor() {
 
   // ------------- Persistence -------------
   const serialize = useCallback((): SavedProject => {
-    return {
+    const base: SavedProject = {
       id: projectId,
       name: projectName,
       width: dims.w, height: dims.h, fps,
@@ -1071,7 +1071,14 @@ export default function ToonvoEditor() {
       thumbnail: thumbs[0] || "",
       updatedAt: Date.now(),
     };
-  }, [projectId, projectName, dims, fps, thumbs]);
+    // Extra (untyped) persistence for bg / audio
+    framesRef.current.forEach((f, i) => {
+      (base.frames[i] as unknown as { bg?: string | null; bgImage?: BgImage | null }).bg = f.bg;
+      (base.frames[i] as unknown as { bg?: string | null; bgImage?: BgImage | null }).bgImage = f.bgImage ?? null;
+    });
+    (base as unknown as { audioTracks?: AudioTrack[] }).audioTracks = audioTracks;
+    return base;
+  }, [projectId, projectName, dims, fps, thumbs, audioTracks]);
 
   const saveNow = useCallback(async () => {
     if (framesRef.current.length === 0) return;
