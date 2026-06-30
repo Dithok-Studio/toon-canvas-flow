@@ -208,9 +208,20 @@ export default function ToonvoEditor() {
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [alpha, setAlpha] = useState(1);
 
+  // Reference images (up to 3 floating panels)
+  const [refImages, setRefImages] = useState<RefImage[]>([]);
+  // Audio tracks (up to 3)
+  const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+
   const spaceDownRef = useRef(false);
   const panModeRef = useRef(false);
   const saveNowRef = useRef<(() => void) | null>(null);
+  const bgImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const audioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const bgFileRef = useRef<HTMLInputElement>(null);
+  const refFileRef = useRef<HTMLInputElement>(null);
+  const audioFileRef = useRef<HTMLInputElement>(null);
 
   const displayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
