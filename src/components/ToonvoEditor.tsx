@@ -18,11 +18,41 @@ interface Layer {
   blend: BlendMode;
   canvas: HTMLCanvasElement;
 }
+interface BgImage {
+  src: string;
+  fit: "fill" | "fit" | "stretch";
+  opacity: number;
+}
 interface Frame {
   duration: number;
   layers: Layer[];
   activeLayer: number;
   bg: string | null; // null = transparent
+  bgImage?: BgImage | null;
+}
+interface RefImage {
+  id: string;
+  src: string;
+  x: number; y: number; w: number; h: number;
+  opacity: number;
+  flipH: boolean; flipV: boolean;
+  minimized: boolean;
+  zoom: number;
+}
+interface AudioTrack {
+  id: string;
+  name: string;
+  src: string;
+  volume: number;
+  muted: boolean;
+  solo: boolean;
+  offsetFrames: number;
+  trimStart: number;
+  trimEnd: number; // 0 = end of file
+  loop: boolean;
+  speed: number;
+  color: string;
+  duration: number;
 }
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
@@ -83,7 +113,7 @@ function makeLayer(w: number, h: number, name: string): Layer {
 }
 
 function makeFrame(w: number, h: number, bg: string | null = "#ffffff"): Frame {
-  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg };
+  return { duration: 100, layers: [makeLayer(w, h, "Layer 1")], activeLayer: 0, bg, bgImage: null };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -178,9 +208,20 @@ export default function ToonvoEditor() {
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [alpha, setAlpha] = useState(1);
 
+  // Reference images (up to 3 floating panels)
+  const [refImages, setRefImages] = useState<RefImage[]>([]);
+  // Audio tracks (up to 3)
+  const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+
   const spaceDownRef = useRef(false);
   const panModeRef = useRef(false);
   const saveNowRef = useRef<(() => void) | null>(null);
+  const bgImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const audioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const bgFileRef = useRef<HTMLInputElement>(null);
+  const refFileRef = useRef<HTMLInputElement>(null);
+  const audioFileRef = useRef<HTMLInputElement>(null);
 
   const displayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -259,6 +300,35 @@ export default function ToonvoEditor() {
             ctx.fillStyle = ((xx / s + yy / s) & 1) ? "#bfbfbf" : "#ffffff";
             ctx.fillRect(xx, yy, s, s);
           }
+        }
+      }
+      // Background image (per-frame, locked behind layers)
+      if (cur.bgImage && cur.bgImage.src) {
+        const cache = bgImgCacheRef.current;
+        let img = cache.get(cur.bgImage.src);
+        if (!img) {
+          img = new Image();
+          img.onload = () => render();
+          img.src = cur.bgImage.src;
+          cache.set(cur.bgImage.src, img);
+        }
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.save();
+          ctx.globalAlpha = cur.bgImage.opacity;
+          const iw = img.naturalWidth, ih = img.naturalHeight;
+          const cw = dims.w, ch = dims.h;
+          if (cur.bgImage.fit === "stretch") {
+            ctx.drawImage(img, 0, 0, cw, ch);
+          } else if (cur.bgImage.fit === "fill") {
+            const s = Math.max(cw / iw, ch / ih);
+            const dw = iw * s, dh = ih * s;
+            ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          } else {
+            const s = Math.min(cw / iw, ch / ih);
+            const dw = iw * s, dh = ih * s;
+            ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          }
+          ctx.restore();
         }
       }
     }
@@ -465,6 +535,94 @@ export default function ToonvoEditor() {
       copy[currentFrame] = { ...f, bg };
       return copy;
     });
+  };
+
+  const updateFrame = (idx: number, patch: Partial<Frame>) => {
+    setFrames((fs) => fs.map((f, i) => i === idx ? { ...f, ...patch } : f));
+  };
+  const updateBgImage = (patch: Partial<BgImage>, all = false) => {
+    setFrames((fs) => fs.map((f, i) => {
+      if (!all && i !== currentFrame) return f;
+      const cur = f.bgImage ?? { src: "", fit: "fill" as const, opacity: 1 };
+      return { ...f, bgImage: { ...cur, ...patch } };
+    }));
+  };
+  const importBgImage = (file: File) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      updateBgImage({ src, fit: "fill", opacity: 1 });
+      setTimeout(() => { buildThumb(currentFrame); render(); }, 50);
+    };
+    fr.readAsDataURL(file);
+  };
+  const applyBgToAll = () => {
+    const cur = frames[currentFrame]?.bgImage;
+    if (!cur) return;
+    setFrames(fs => fs.map(f => ({ ...f, bgImage: { ...cur } })));
+    setTimeout(() => framesRef.current.forEach((_, i) => buildThumb(i)), 50);
+  };
+  const clearBgImage = () => {
+    updateBgImage({ src: "" });
+    setFrames(fs => fs.map((f, i) => i === currentFrame ? { ...f, bgImage: null } : f));
+    setTimeout(() => buildThumb(currentFrame), 30);
+  };
+
+  // Reference images
+  const importRefImage = (file: File) => {
+    if (refImages.length >= 3) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      const w = Math.min(300, window.innerWidth - 40);
+      const x = Math.max(20, window.innerWidth - w - 320);
+      setRefImages(rs => [...rs, {
+        id: uid(), src, x, y: 80, w, h: w,
+        opacity: 1, flipH: false, flipV: false, minimized: false, zoom: 1,
+      }]);
+    };
+    fr.readAsDataURL(file);
+  };
+  const updateRefImage = (id: string, patch: Partial<RefImage>) => {
+    setRefImages(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r));
+  };
+  const removeRefImage = (id: string) => setRefImages(rs => rs.filter(r => r.id !== id));
+
+  // Audio
+  const TRACK_COLORS = ["#9b6cff", "#3aa7ff", "#43d18d"];
+  const importAudio = (file: File) => {
+    if (audioTracks.length >= 3) return;
+    if (file.size > 50 * 1024 * 1024) { alert("Audio max 50MB"); return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+      const src = String(fr.result);
+      const id = uid();
+      const audio = new Audio(src);
+      audioElsRef.current.set(id, audio);
+      audio.addEventListener("loadedmetadata", () => {
+        setAudioTracks(ts => ts.map(t => t.id === id ? { ...t, duration: audio.duration } : t));
+      });
+      const defaults = ["Music", "Voice", "Sound FX"];
+      setAudioTracks(ts => [...ts, {
+        id, name: defaults[ts.length] || file.name, src,
+        volume: 1, muted: false, solo: false,
+        offsetFrames: 0, trimStart: 0, trimEnd: 0,
+        loop: true, speed: 1,
+        color: TRACK_COLORS[ts.length] || "#888",
+        duration: 0,
+      }]);
+      setSelectedAudio(id);
+    };
+    fr.readAsDataURL(file);
+  };
+  const updateAudio = (id: string, patch: Partial<AudioTrack>) => {
+    setAudioTracks(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
+  };
+  const removeAudio = (id: string) => {
+    const a = audioElsRef.current.get(id);
+    if (a) { a.pause(); audioElsRef.current.delete(id); }
+    setAudioTracks(ts => ts.filter(t => t.id !== id));
+    if (selectedAudio === id) setSelectedAudio(null);
   };
 
   const getToolCursor = (t: Tool, spaceDown: boolean): string => {
@@ -808,6 +966,57 @@ export default function ToonvoEditor() {
     return () => clearInterval(interval);
   }, [playing, fps, loop]);
 
+  // Audio playback sync
+  useEffect(() => {
+    const anySolo = audioTracks.some(t => t.solo);
+    audioTracks.forEach(t => {
+      const a = audioElsRef.current.get(t.id);
+      if (!a) return;
+      const audible = !t.muted && (!anySolo || t.solo);
+      a.volume = audible ? t.volume : 0;
+      a.loop = t.loop;
+      a.playbackRate = t.speed;
+      if (playing) {
+        const frameTime = currentRef.current / fps;
+        const offsetSec = t.offsetFrames / fps;
+        const target = Math.max(t.trimStart, frameTime - offsetSec + t.trimStart);
+        if (frameTime >= offsetSec) {
+          if (Math.abs(a.currentTime - target) > 0.15) {
+            try { a.currentTime = target; } catch {}
+          }
+          a.play().catch(() => {});
+        } else {
+          a.pause();
+        }
+      } else {
+        a.pause();
+      }
+    });
+    return () => {
+      if (!playing) audioTracks.forEach(t => {
+        const a = audioElsRef.current.get(t.id);
+        if (a) a.pause();
+      });
+    };
+  }, [playing, audioTracks, fps]);
+
+  // Stop audio when scrubbing (re-sync handled in next play)
+  useEffect(() => {
+    if (!playing) return;
+    audioTracks.forEach(t => {
+      const a = audioElsRef.current.get(t.id);
+      if (!a) return;
+      const frameTime = currentFrame / fps;
+      const offsetSec = t.offsetFrames / fps;
+      if (frameTime < offsetSec) { a.pause(); return; }
+      const target = frameTime - offsetSec + t.trimStart;
+      if (Math.abs(a.currentTime - target) > 0.3) {
+        try { a.currentTime = target; } catch {}
+      }
+    });
+  }, [currentFrame, playing, audioTracks, fps]);
+
+
   // ------------- Keyboard -------------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -848,7 +1057,7 @@ export default function ToonvoEditor() {
 
   // ------------- Persistence -------------
   const serialize = useCallback((): SavedProject => {
-    return {
+    const base: SavedProject = {
       id: projectId,
       name: projectName,
       width: dims.w, height: dims.h, fps,
@@ -862,7 +1071,14 @@ export default function ToonvoEditor() {
       thumbnail: thumbs[0] || "",
       updatedAt: Date.now(),
     };
-  }, [projectId, projectName, dims, fps, thumbs]);
+    // Extra (untyped) persistence for bg / audio
+    framesRef.current.forEach((f, i) => {
+      (base.frames[i] as unknown as { bg?: string | null; bgImage?: BgImage | null }).bg = f.bg;
+      (base.frames[i] as unknown as { bg?: string | null; bgImage?: BgImage | null }).bgImage = f.bgImage ?? null;
+    });
+    (base as unknown as { audioTracks?: AudioTrack[] }).audioTracks = audioTracks;
+    return base;
+  }, [projectId, projectName, dims, fps, thumbs, audioTracks]);
 
   const saveNow = useCallback(async () => {
     if (framesRef.current.length === 0) return;
@@ -898,12 +1114,24 @@ export default function ToonvoEditor() {
         });
         layers.push(layer);
       }
-      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: (f as { bg?: string | null }).bg ?? "#ffffff" });
+      const ext = f as { bg?: string | null; bgImage?: BgImage | null };
+      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: ext.bg ?? "#ffffff", bgImage: ext.bgImage ?? null });
     }
     setFrames(loaded);
     setCurrentFrame(0);
     setShowProjects(false); setShowNew(false);
     setThumbs({});
+    // Restore audio tracks
+    const at = (p as unknown as { audioTracks?: AudioTrack[] }).audioTracks;
+    if (at && Array.isArray(at)) {
+      audioElsRef.current.forEach(a => a.pause());
+      audioElsRef.current.clear();
+      at.forEach(t => audioElsRef.current.set(t.id, new Audio(t.src)));
+      setAudioTracks(at);
+    } else {
+      setAudioTracks([]);
+    }
+    setRefImages([]);
     setTimeout(() => loaded.forEach((_, i) => buildThumb(i)), 50);
   };
 
@@ -932,6 +1160,12 @@ export default function ToonvoEditor() {
           <button onClick={async () => { setSavedList(await listProjects()); setShowProjects(true); }}>Open</button>
           <button onClick={saveNow}>Save</button>
           <button onClick={exportToonvo}>Export</button>
+          <button onClick={() => bgFileRef.current?.click()} title="Import Background Image">🖼️＋ BG</button>
+          <button onClick={() => refFileRef.current?.click()} title="Import Reference Image" disabled={refImages.length >= 3}>👁 Ref</button>
+          <button onClick={() => audioFileRef.current?.click()} title="Import Audio" disabled={audioTracks.length >= 3}>🎵 Audio</button>
+          <input ref={bgFileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importBgImage(f); e.target.value = ""; }} />
+          <input ref={refFileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importRefImage(f); e.target.value = ""; }} />
+          <input ref={audioFileRef} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/ogg,audio/mp4,audio/x-m4a,.m4a" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importAudio(f); e.target.value = ""; }} />
         </div>
         <div className="toolopts">
           {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft"].includes(tool) && (
@@ -1044,6 +1278,49 @@ export default function ToonvoEditor() {
           </div>
 
 
+          {/* Audio tracks bars */}
+          {audioTracks.length > 0 && (
+            <div style={{ background: "#0f0f1c", borderTop: "1px solid #222", padding: "4px 8px", display: "flex", flexDirection: "column", gap: 3 }}>
+              {audioTracks.map(t => {
+                const totalSec = (frames.length || 1) / fps;
+                const audioVisibleSec = Math.min(t.duration || totalSec, totalSec);
+                const startPct = Math.max(0, Math.min(100, (t.offsetFrames / fps / totalSec) * 100));
+                const widthPct = Math.max(2, Math.min(100 - startPct, (audioVisibleSec / totalSec) * 100));
+                return (
+                  <div key={t.id} onClick={() => setSelectedAudio(t.id)} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", height: 22 }}>
+                    <span style={{ width: 70, fontSize: 10, color: "#aaa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                    <div style={{ position: "relative", flex: 1, height: 18, background: "#1a1a2e", borderRadius: 3, overflow: "hidden", border: selectedAudio === t.id ? `1px solid ${t.color}` : "1px solid #222" }}>
+                      <div style={{ position: "absolute", left: `${startPct}%`, width: `${widthPct}%`, top: 0, bottom: 0, background: `linear-gradient(180deg, ${t.color}aa, ${t.color}55)`, backgroundImage: `repeating-linear-gradient(90deg, ${t.color}cc 0 1px, ${t.color}33 1px 3px)` }} />
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); updateAudio(t.id, { muted: !t.muted }); }} style={{ padding: "2px 6px", fontSize: 10 }} title="Mute">{t.muted ? "🔇" : "🔊"}</button>
+                  </div>
+                );
+              })}
+              {selectedAudio && (() => {
+                const t = audioTracks.find(x => x.id === selectedAudio);
+                if (!t) return null;
+                return (
+                  <div style={{ background: "#1a1a2e", padding: 8, borderRadius: 4, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 11, color: "#bbb" }}>
+                    <input value={t.name} onChange={e => updateAudio(t.id, { name: e.target.value })} style={{ width: 90 }} />
+                    <label>Vol <input type="range" min={0} max={100} value={Math.round(t.volume * 100)} onChange={e => updateAudio(t.id, { volume: +e.target.value / 100 })} /></label>
+                    <label>Speed
+                      <select value={t.speed} onChange={e => updateAudio(t.id, { speed: +e.target.value })}>
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => <option key={s} value={s}>{s}x</option>)}
+                      </select>
+                    </label>
+                    <label>Trim start <input type="number" step="0.1" value={t.trimStart} onChange={e => updateAudio(t.id, { trimStart: +e.target.value })} style={{ width: 50 }} />s</label>
+                    <label>Trim end <input type="number" step="0.1" value={t.trimEnd} onChange={e => updateAudio(t.id, { trimEnd: +e.target.value })} style={{ width: 50 }} />s</label>
+                    <label>Offset <input type="number" value={t.offsetFrames} onChange={e => updateAudio(t.id, { offsetFrames: +e.target.value })} style={{ width: 50 }} />frames</label>
+                    <label><input type="checkbox" checked={t.loop} onChange={e => updateAudio(t.id, { loop: e.target.checked })} /> Loop</label>
+                    <button onClick={() => updateAudio(t.id, { solo: !t.solo })} className={t.solo ? "active" : ""}>Solo</button>
+                    <span>{t.duration ? `${t.duration.toFixed(1)}s` : ""}</span>
+                    <button onClick={() => removeAudio(t.id)}>Remove</button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Timeline */}
           <div className="timeline">
             <div className="playbar">
@@ -1068,8 +1345,11 @@ export default function ToonvoEditor() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => { e.preventDefault(); moveFrame(+e.dataTransfer.getData("text/plain"), i); }}
                 >
-                  <div className="thumb">
+                  <div className="thumb" style={{ position: "relative" }}>
                     {thumbs[i] ? <img src={thumbs[i]} alt="" /> : <span>{i + 1}</span>}
+                    {f.bgImage?.src && (
+                      <img src={f.bgImage.src} alt="" style={{ position: "absolute", left: 2, bottom: 2, width: 18, height: 18, objectFit: "cover", border: "1px solid #6c63ff", borderRadius: 2 }} />
+                    )}
                   </div>
                   <div className="finfo">
                     <span>#{i + 1}</span>
@@ -1171,8 +1451,38 @@ export default function ToonvoEditor() {
               ))}
             </div>
           </section>
+
+          {/* Background Image */}
+          <section className="panel">
+            <h3>Background Image</h3>
+            {frame?.bgImage?.src ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <img src={frame.bgImage.src} alt="" style={{ width: "100%", maxHeight: 90, objectFit: "contain", background: "#000", borderRadius: 4 }} />
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => bgFileRef.current?.click()} style={{ flex: 1 }}>Replace</button>
+                  <button onClick={clearBgImage} style={{ flex: 1 }}>Remove</button>
+                </div>
+                <label style={{ fontSize: 11 }}>Opacity
+                  <input type="range" min={0} max={100} value={Math.round(frame.bgImage.opacity * 100)} onChange={e => updateBgImage({ opacity: +e.target.value / 100 })} />
+                </label>
+                <div style={{ display: "flex", gap: 4, fontSize: 11 }}>
+                  {(["fill", "fit", "stretch"] as const).map(m => (
+                    <button key={m} className={frame.bgImage!.fit === m ? "active" : ""} onClick={() => updateBgImage({ fit: m })} style={{ flex: 1, textTransform: "capitalize" }}>{m}</button>
+                  ))}
+                </div>
+                <button onClick={applyBgToAll} style={{ fontSize: 11 }}>Apply to all frames</button>
+              </div>
+            ) : (
+              <button onClick={() => bgFileRef.current?.click()} style={{ width: "100%" }}>Import Background Image</button>
+            )}
+          </section>
         </aside>
       </div>
+
+      {/* Floating reference image panels */}
+      {refImages.map(r => (
+        <ReferencePanel key={r.id} data={r} onChange={(p) => updateRefImage(r.id, p)} onClose={() => removeRefImage(r.id)} />
+      ))}
 
       {/* New Project Modal */}
       {showNew && <NewProjectModal onConfirm={startProject} onCancel={() => frames.length > 0 && setShowNew(false)} hasProject={frames.length > 0} onOpen={async () => { setSavedList(await listProjects()); setShowProjects(true); }} />}
@@ -1181,11 +1491,59 @@ export default function ToonvoEditor() {
   );
 }
 
+function ReferencePanel({ data, onChange, onClose }: { data: RefImage; onChange: (p: Partial<RefImage>) => void; onClose: () => void }) {
+  const dragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; x: number; y: number; w: number; h: number } | null>(null);
+  const onPointerDown = (mode: "move" | "resize") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragRef.current = { mode, sx: e.clientX, sy: e.clientY, x: data.x, y: data.y, w: data.w, h: data.h };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current; if (!d) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    if (d.mode === "move") onChange({ x: d.x + dx, y: d.y + dy });
+    else onChange({ w: Math.max(150, Math.min(800, d.w + dx)), h: Math.max(150, Math.min(800, d.h + dy)) });
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
+  const headerH = 26;
+  const totalH = data.minimized ? headerH : data.h;
+  return (
+    <div onPointerMove={onPointerMove} onPointerUp={onPointerUp} style={{ position: "fixed", left: data.x, top: data.y, width: data.w, height: totalH, background: "#0f0f1c", border: "1px solid #6c63ff", borderRadius: 6, zIndex: 9999, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", overflow: "hidden", color: "#ddd", fontSize: 11 }}>
+      <div onPointerDown={onPointerDown("move")} style={{ height: headerH, background: "#1a1a2e", display: "flex", alignItems: "center", padding: "0 6px", cursor: "move", gap: 4, userSelect: "none" }}>
+        <span style={{ flex: 1, fontWeight: 600 }}>Reference Image</span>
+        <button onClick={() => onChange({ flipH: !data.flipH })} title="Flip H" style={{ padding: "0 4px" }}>⇋</button>
+        <button onClick={() => onChange({ flipV: !data.flipV })} title="Flip V" style={{ padding: "0 4px" }}>⇅</button>
+        <button onClick={() => onChange({ zoom: Math.max(0.2, data.zoom - 0.1) })} title="Zoom out" style={{ padding: "0 4px" }}>－</button>
+        <button onClick={() => onChange({ zoom: Math.min(5, data.zoom + 0.1) })} title="Zoom in" style={{ padding: "0 4px" }}>＋</button>
+        <button onClick={() => onChange({ minimized: !data.minimized })} title="Minimize" style={{ padding: "0 4px" }}>{data.minimized ? "▢" : "─"}</button>
+        <button onClick={() => onChange({ w: 600, h: 600, minimized: false })} title="Maximize" style={{ padding: "0 4px" }}>⛶</button>
+        <button onClick={onClose} title="Close" style={{ padding: "0 4px" }}>✕</button>
+      </div>
+      {!data.minimized && (
+        <>
+          <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#000" }}>
+            <img src={data.src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: data.opacity, transform: `scale(${data.zoom * (data.flipH ? -1 : 1)}, ${data.zoom * (data.flipV ? -1 : 1)})`, pointerEvents: "none" }} />
+          </div>
+          <div style={{ padding: "4px 6px", background: "#15152a", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>Opacity</span>
+            <input style={{ flex: 1 }} type="range" min={0} max={100} value={Math.round(data.opacity * 100)} onChange={e => onChange({ opacity: +e.target.value / 100 })} />
+            <span>{Math.round(data.opacity * 100)}%</span>
+          </div>
+          <div onPointerDown={onPointerDown("resize")} style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #6c63ff 50%)" }} />
+        </>
+      )}
+    </div>
+  );
+}
+
+
 function cloneFrame(f: Frame, w: number, h: number): Frame {
   return {
     duration: f.duration,
     activeLayer: f.activeLayer,
     bg: f.bg,
+    bgImage: f.bgImage ? { ...f.bgImage } : null,
     layers: f.layers.map(l => {
       const c = makeCanvas(w, h);
       c.getContext("2d")!.drawImage(l.canvas, 0, 0);
