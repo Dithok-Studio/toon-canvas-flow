@@ -18,11 +18,41 @@ interface Layer {
   blend: BlendMode;
   canvas: HTMLCanvasElement;
 }
+interface BgImage {
+  src: string;
+  fit: "fill" | "fit" | "stretch";
+  opacity: number;
+}
 interface Frame {
   duration: number;
   layers: Layer[];
   activeLayer: number;
   bg: string | null; // null = transparent
+  bgImage?: BgImage | null;
+}
+interface RefImage {
+  id: string;
+  src: string;
+  x: number; y: number; w: number; h: number;
+  opacity: number;
+  flipH: boolean; flipV: boolean;
+  minimized: boolean;
+  zoom: number;
+}
+interface AudioTrack {
+  id: string;
+  name: string;
+  src: string;
+  volume: number;
+  muted: boolean;
+  solo: boolean;
+  offsetFrames: number;
+  trimStart: number;
+  trimEnd: number; // 0 = end of file
+  loop: boolean;
+  speed: number;
+  color: string;
+  duration: number;
 }
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
