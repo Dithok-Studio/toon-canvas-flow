@@ -1114,7 +1114,8 @@ export default function ToonvoEditor() {
         });
         layers.push(layer);
       }
-      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: (f as { bg?: string | null }).bg ?? "#ffffff" });
+      const ext = f as { bg?: string | null; bgImage?: BgImage | null };
+      loaded.push({ duration: f.duration, layers, activeLayer: 0, bg: ext.bg ?? "#ffffff", bgImage: ext.bgImage ?? null });
     }
     setFrames(loaded);
     setCurrentFrame(0);
