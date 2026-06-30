@@ -966,6 +966,57 @@ export default function ToonvoEditor() {
     return () => clearInterval(interval);
   }, [playing, fps, loop]);
 
+  // Audio playback sync
+  useEffect(() => {
+    const anySolo = audioTracks.some(t => t.solo);
+    audioTracks.forEach(t => {
+      const a = audioElsRef.current.get(t.id);
+      if (!a) return;
+      const audible = !t.muted && (!anySolo || t.solo);
+      a.volume = audible ? t.volume : 0;
+      a.loop = t.loop;
+      a.playbackRate = t.speed;
+      if (playing) {
+        const frameTime = currentRef.current / fps;
+        const offsetSec = t.offsetFrames / fps;
+        const target = Math.max(t.trimStart, frameTime - offsetSec + t.trimStart);
+        if (frameTime >= offsetSec) {
+          if (Math.abs(a.currentTime - target) > 0.15) {
+            try { a.currentTime = target; } catch {}
+          }
+          a.play().catch(() => {});
+        } else {
+          a.pause();
+        }
+      } else {
+        a.pause();
+      }
+    });
+    return () => {
+      if (!playing) audioTracks.forEach(t => {
+        const a = audioElsRef.current.get(t.id);
+        if (a) a.pause();
+      });
+    };
+  }, [playing, audioTracks, fps]);
+
+  // Stop audio when scrubbing (re-sync handled in next play)
+  useEffect(() => {
+    if (!playing) return;
+    audioTracks.forEach(t => {
+      const a = audioElsRef.current.get(t.id);
+      if (!a) return;
+      const frameTime = currentFrame / fps;
+      const offsetSec = t.offsetFrames / fps;
+      if (frameTime < offsetSec) { a.pause(); return; }
+      const target = frameTime - offsetSec + t.trimStart;
+      if (Math.abs(a.currentTime - target) > 0.3) {
+        try { a.currentTime = target; } catch {}
+      }
+    });
+  }, [currentFrame, playing, audioTracks, fps]);
+
+
   // ------------- Keyboard -------------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
