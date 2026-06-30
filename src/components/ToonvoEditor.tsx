@@ -1451,8 +1451,38 @@ export default function ToonvoEditor() {
               ))}
             </div>
           </section>
+
+          {/* Background Image */}
+          <section className="panel">
+            <h3>Background Image</h3>
+            {frame?.bgImage?.src ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <img src={frame.bgImage.src} alt="" style={{ width: "100%", maxHeight: 90, objectFit: "contain", background: "#000", borderRadius: 4 }} />
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => bgFileRef.current?.click()} style={{ flex: 1 }}>Replace</button>
+                  <button onClick={clearBgImage} style={{ flex: 1 }}>Remove</button>
+                </div>
+                <label style={{ fontSize: 11 }}>Opacity
+                  <input type="range" min={0} max={100} value={Math.round(frame.bgImage.opacity * 100)} onChange={e => updateBgImage({ opacity: +e.target.value / 100 })} />
+                </label>
+                <div style={{ display: "flex", gap: 4, fontSize: 11 }}>
+                  {(["fill", "fit", "stretch"] as const).map(m => (
+                    <button key={m} className={frame.bgImage!.fit === m ? "active" : ""} onClick={() => updateBgImage({ fit: m })} style={{ flex: 1, textTransform: "capitalize" }}>{m}</button>
+                  ))}
+                </div>
+                <button onClick={applyBgToAll} style={{ fontSize: 11 }}>Apply to all frames</button>
+              </div>
+            ) : (
+              <button onClick={() => bgFileRef.current?.click()} style={{ width: "100%" }}>Import Background Image</button>
+            )}
+          </section>
         </aside>
       </div>
+
+      {/* Floating reference image panels */}
+      {refImages.map(r => (
+        <ReferencePanel key={r.id} data={r} onChange={(p) => updateRefImage(r.id, p)} onClose={() => removeRefImage(r.id)} />
+      ))}
 
       {/* New Project Modal */}
       {showNew && <NewProjectModal onConfirm={startProject} onCancel={() => frames.length > 0 && setShowNew(false)} hasProject={frames.length > 0} onOpen={async () => { setSavedList(await listProjects()); setShowProjects(true); }} />}
@@ -1460,6 +1490,53 @@ export default function ToonvoEditor() {
     </div>
   );
 }
+
+function ReferencePanel({ data, onChange, onClose }: { data: RefImage; onChange: (p: Partial<RefImage>) => void; onClose: () => void }) {
+  const dragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; x: number; y: number; w: number; h: number } | null>(null);
+  const onPointerDown = (mode: "move" | "resize") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragRef.current = { mode, sx: e.clientX, sy: e.clientY, x: data.x, y: data.y, w: data.w, h: data.h };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current; if (!d) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    if (d.mode === "move") onChange({ x: d.x + dx, y: d.y + dy });
+    else onChange({ w: Math.max(150, Math.min(800, d.w + dx)), h: Math.max(150, Math.min(800, d.h + dy)) });
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
+  const headerH = 26;
+  const totalH = data.minimized ? headerH : data.h;
+  return (
+    <div onPointerMove={onPointerMove} onPointerUp={onPointerUp} style={{ position: "fixed", left: data.x, top: data.y, width: data.w, height: totalH, background: "#0f0f1c", border: "1px solid #6c63ff", borderRadius: 6, zIndex: 9999, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", overflow: "hidden", color: "#ddd", fontSize: 11 }}>
+      <div onPointerDown={onPointerDown("move")} style={{ height: headerH, background: "#1a1a2e", display: "flex", alignItems: "center", padding: "0 6px", cursor: "move", gap: 4, userSelect: "none" }}>
+        <span style={{ flex: 1, fontWeight: 600 }}>Reference Image</span>
+        <button onClick={() => onChange({ flipH: !data.flipH })} title="Flip H" style={{ padding: "0 4px" }}>⇋</button>
+        <button onClick={() => onChange({ flipV: !data.flipV })} title="Flip V" style={{ padding: "0 4px" }}>⇅</button>
+        <button onClick={() => onChange({ zoom: Math.max(0.2, data.zoom - 0.1) })} title="Zoom out" style={{ padding: "0 4px" }}>－</button>
+        <button onClick={() => onChange({ zoom: Math.min(5, data.zoom + 0.1) })} title="Zoom in" style={{ padding: "0 4px" }}>＋</button>
+        <button onClick={() => onChange({ minimized: !data.minimized })} title="Minimize" style={{ padding: "0 4px" }}>{data.minimized ? "▢" : "─"}</button>
+        <button onClick={() => onChange({ w: 600, h: 600, minimized: false })} title="Maximize" style={{ padding: "0 4px" }}>⛶</button>
+        <button onClick={onClose} title="Close" style={{ padding: "0 4px" }}>✕</button>
+      </div>
+      {!data.minimized && (
+        <>
+          <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#000" }}>
+            <img src={data.src} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: data.opacity, transform: `scale(${data.zoom * (data.flipH ? -1 : 1)}, ${data.zoom * (data.flipV ? -1 : 1)})`, pointerEvents: "none" }} />
+          </div>
+          <div style={{ padding: "4px 6px", background: "#15152a", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>Opacity</span>
+            <input style={{ flex: 1 }} type="range" min={0} max={100} value={Math.round(data.opacity * 100)} onChange={e => onChange({ opacity: +e.target.value / 100 })} />
+            <span>{Math.round(data.opacity * 100)}%</span>
+          </div>
+          <div onPointerDown={onPointerDown("resize")} style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #6c63ff 50%)" }} />
+        </>
+      )}
+    </div>
+  );
+}
+
 
 function cloneFrame(f: Frame, w: number, h: number): Frame {
   return {
