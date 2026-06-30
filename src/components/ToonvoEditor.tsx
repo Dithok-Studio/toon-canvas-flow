@@ -1160,6 +1160,12 @@ export default function ToonvoEditor() {
           <button onClick={async () => { setSavedList(await listProjects()); setShowProjects(true); }}>Open</button>
           <button onClick={saveNow}>Save</button>
           <button onClick={exportToonvo}>Export</button>
+          <button onClick={() => bgFileRef.current?.click()} title="Import Background Image">🖼️＋ BG</button>
+          <button onClick={() => refFileRef.current?.click()} title="Import Reference Image" disabled={refImages.length >= 3}>👁 Ref</button>
+          <button onClick={() => audioFileRef.current?.click()} title="Import Audio" disabled={audioTracks.length >= 3}>🎵 Audio</button>
+          <input ref={bgFileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importBgImage(f); e.target.value = ""; }} />
+          <input ref={refFileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importRefImage(f); e.target.value = ""; }} />
+          <input ref={audioFileRef} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/ogg,audio/mp4,audio/x-m4a,.m4a" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importAudio(f); e.target.value = ""; }} />
         </div>
         <div className="toolopts">
           {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft"].includes(tool) && (
