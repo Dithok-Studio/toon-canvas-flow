@@ -1278,6 +1278,49 @@ export default function ToonvoEditor() {
           </div>
 
 
+          {/* Audio tracks bars */}
+          {audioTracks.length > 0 && (
+            <div style={{ background: "#0f0f1c", borderTop: "1px solid #222", padding: "4px 8px", display: "flex", flexDirection: "column", gap: 3 }}>
+              {audioTracks.map(t => {
+                const totalSec = (frames.length || 1) / fps;
+                const audioVisibleSec = Math.min(t.duration || totalSec, totalSec);
+                const startPct = Math.max(0, Math.min(100, (t.offsetFrames / fps / totalSec) * 100));
+                const widthPct = Math.max(2, Math.min(100 - startPct, (audioVisibleSec / totalSec) * 100));
+                return (
+                  <div key={t.id} onClick={() => setSelectedAudio(t.id)} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", height: 22 }}>
+                    <span style={{ width: 70, fontSize: 10, color: "#aaa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                    <div style={{ position: "relative", flex: 1, height: 18, background: "#1a1a2e", borderRadius: 3, overflow: "hidden", border: selectedAudio === t.id ? `1px solid ${t.color}` : "1px solid #222" }}>
+                      <div style={{ position: "absolute", left: `${startPct}%`, width: `${widthPct}%`, top: 0, bottom: 0, background: `linear-gradient(180deg, ${t.color}aa, ${t.color}55)`, backgroundImage: `repeating-linear-gradient(90deg, ${t.color}cc 0 1px, ${t.color}33 1px 3px)` }} />
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); updateAudio(t.id, { muted: !t.muted }); }} style={{ padding: "2px 6px", fontSize: 10 }} title="Mute">{t.muted ? "🔇" : "🔊"}</button>
+                  </div>
+                );
+              })}
+              {selectedAudio && (() => {
+                const t = audioTracks.find(x => x.id === selectedAudio);
+                if (!t) return null;
+                return (
+                  <div style={{ background: "#1a1a2e", padding: 8, borderRadius: 4, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 11, color: "#bbb" }}>
+                    <input value={t.name} onChange={e => updateAudio(t.id, { name: e.target.value })} style={{ width: 90 }} />
+                    <label>Vol <input type="range" min={0} max={100} value={Math.round(t.volume * 100)} onChange={e => updateAudio(t.id, { volume: +e.target.value / 100 })} /></label>
+                    <label>Speed
+                      <select value={t.speed} onChange={e => updateAudio(t.id, { speed: +e.target.value })}>
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => <option key={s} value={s}>{s}x</option>)}
+                      </select>
+                    </label>
+                    <label>Trim start <input type="number" step="0.1" value={t.trimStart} onChange={e => updateAudio(t.id, { trimStart: +e.target.value })} style={{ width: 50 }} />s</label>
+                    <label>Trim end <input type="number" step="0.1" value={t.trimEnd} onChange={e => updateAudio(t.id, { trimEnd: +e.target.value })} style={{ width: 50 }} />s</label>
+                    <label>Offset <input type="number" value={t.offsetFrames} onChange={e => updateAudio(t.id, { offsetFrames: +e.target.value })} style={{ width: 50 }} />frames</label>
+                    <label><input type="checkbox" checked={t.loop} onChange={e => updateAudio(t.id, { loop: e.target.checked })} /> Loop</label>
+                    <button onClick={() => updateAudio(t.id, { solo: !t.solo })} className={t.solo ? "active" : ""}>Solo</button>
+                    <span>{t.duration ? `${t.duration.toFixed(1)}s` : ""}</span>
+                    <button onClick={() => removeAudio(t.id)}>Remove</button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Timeline */}
           <div className="timeline">
             <div className="playbar">
@@ -1302,8 +1345,11 @@ export default function ToonvoEditor() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => { e.preventDefault(); moveFrame(+e.dataTransfer.getData("text/plain"), i); }}
                 >
-                  <div className="thumb">
+                  <div className="thumb" style={{ position: "relative" }}>
                     {thumbs[i] ? <img src={thumbs[i]} alt="" /> : <span>{i + 1}</span>}
+                    {f.bgImage?.src && (
+                      <img src={f.bgImage.src} alt="" style={{ position: "absolute", left: 2, bottom: 2, width: 18, height: 18, objectFit: "cover", border: "1px solid #6c63ff", borderRadius: 2 }} />
+                    )}
                   </div>
                   <div className="finfo">
                     <span>#{i + 1}</span>
