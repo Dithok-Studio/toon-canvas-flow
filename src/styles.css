@@ -154,19 +154,23 @@ input[type="text"], input[type="number"], input[type="color"], select {
 
 .center {
   display: grid;
-  grid-template-rows: 1fr 180px;
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: auto;
   overflow: hidden;
+  min-width: 0;
 }
 .canvasarea {
   position: relative;
   background: #0a0a14;
   overflow: hidden;
+  min-height: 0;
 }
 .display {
   width: 100%; height: 100%; display: block;
 }
 
 .timeline {
+  max-height: 150px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   display: flex; flex-direction: column;
