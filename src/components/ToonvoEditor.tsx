@@ -215,6 +215,7 @@ export default function ToonvoEditor() {
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
 
   const spaceDownRef = useRef(false);
+  const [spaceDown, setSpaceDown] = useState(false);
   const panModeRef = useRef(false);
   const saveNowRef = useRef<(() => void) | null>(null);
   const bgImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
