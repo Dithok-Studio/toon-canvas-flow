@@ -171,7 +171,7 @@ input[type="text"], input[type="number"], input[type="color"], select {
 }
 
 .timeline {
-  max-height: 150px;
+  max-height: 75px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   display: flex; flex-direction: column;
