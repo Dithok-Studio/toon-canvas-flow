@@ -85,7 +85,7 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
     { id: "lasso", label: "Lasso", icon: "🪢" },
-    { id: "move", label: "Pan", key: "H", icon: "✥" },
+    { id: "move", label: "Pan", key: "V", icon: "✥" },
     { id: "eyedropper", label: "Eyedropper", icon: "💧" },
   ]},
 ];
