@@ -191,11 +191,11 @@ input[type="text"], input[type="number"], input[type="color"], select {
 .frameitem {
   flex: 0 0 auto;
   background: var(--panel2);
-  border: 2px solid var(--line);
-  border-radius: 6px;
-  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px;
   cursor: pointer;
-  min-width: 100px;
+  min-width: 55px;
 }
 .frameitem.active { border-color: var(--accent); }
 .thumb {
