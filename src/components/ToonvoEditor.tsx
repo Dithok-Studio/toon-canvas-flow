@@ -1047,7 +1047,7 @@ export default function ToonvoEditor() {
       if (e.altKey) setTool("eyedropper");
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === " ") spaceDownRef.current = false;
+      if (e.key === " ") { spaceDownRef.current = false; setSpaceDown(false); }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
