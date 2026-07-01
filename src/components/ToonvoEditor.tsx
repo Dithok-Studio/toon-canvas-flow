@@ -1232,7 +1232,7 @@ export default function ToonvoEditor() {
             <canvas
               ref={displayRef}
               className="display"
-              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDownRef.current) }}
+              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDown) }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
