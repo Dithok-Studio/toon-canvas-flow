@@ -120,7 +120,7 @@ input[type="text"], input[type="number"], input[type="color"], select {
 
 .main {
   display: grid;
-  grid-template-columns: 160px 1fr 280px;
+  grid-template-columns: 88px 1fr 280px;
   overflow: hidden;
 }
 
