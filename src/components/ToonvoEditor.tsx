@@ -85,7 +85,7 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
     { id: "lasso", label: "Lasso", icon: "🪢" },
-    { id: "move", label: "Move/Pan", key: "V", icon: "✥" },
+    { id: "move", label: "Pan", key: "V", icon: "✥" },
     { id: "eyedropper", label: "Eyedropper", icon: "💧" },
   ]},
 ];
@@ -215,6 +215,7 @@ export default function ToonvoEditor() {
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
 
   const spaceDownRef = useRef(false);
+  const [spaceDown, setSpaceDown] = useState(false);
   const panModeRef = useRef(false);
   const saveNowRef = useRef<(() => void) | null>(null);
   const bgImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -1022,7 +1023,7 @@ export default function ToonvoEditor() {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
       const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
-      if (e.key === " " && !inField) { e.preventDefault(); spaceDownRef.current = true; return; }
+      if (e.key === " " && !inField) { e.preventDefault(); if (!spaceDownRef.current) { spaceDownRef.current = true; setSpaceDown(true); } return; }
       if (inField) return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
@@ -1046,7 +1047,7 @@ export default function ToonvoEditor() {
       if (e.altKey) setTool("eyedropper");
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === " ") spaceDownRef.current = false;
+      if (e.key === " ") { spaceDownRef.current = false; setSpaceDown(false); }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
@@ -1231,7 +1232,7 @@ export default function ToonvoEditor() {
             <canvas
               ref={displayRef}
               className="display"
-              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDownRef.current) }}
+              style={{ touchAction: "none", cursor: getToolCursor(tool, spaceDown) }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
