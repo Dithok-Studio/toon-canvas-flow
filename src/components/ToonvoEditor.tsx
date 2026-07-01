@@ -1022,7 +1022,7 @@ export default function ToonvoEditor() {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
       const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
-      if (e.key === " " && !inField) { e.preventDefault(); spaceDownRef.current = true; return; }
+      if (e.key === " " && !inField) { e.preventDefault(); if (!spaceDownRef.current) { spaceDownRef.current = true; setSpaceDown(true); } return; }
       if (inField) return;
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
