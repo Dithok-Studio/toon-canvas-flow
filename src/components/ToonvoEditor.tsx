@@ -57,7 +57,7 @@ interface AudioTrack {
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
-  | "bucket" | "rect" | "ellipse" | "line"
+  | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
   | "select" | "lasso" | "move" | "eyedropper";
 
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
@@ -76,11 +76,15 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "eraserSoft", label: "Soft Eraser", icon: "🌫️" },
     { id: "eraserStroke", label: "Stroke Eraser", icon: "❌" },
   ]},
-  { title: "Fill & Shape", tools: [
+  { title: "Fill", tools: [
     { id: "bucket", label: "Bucket", key: "G", icon: "🪣" },
+  ]},
+  { title: "Shapes", tools: [
     { id: "rect", label: "Rectangle", key: "R", icon: "▭" },
     { id: "ellipse", label: "Ellipse", key: "O", icon: "◯" },
     { id: "line", label: "Line", key: "L", icon: "／" },
+    { id: "polygon", label: "Polygon", icon: "⬡" },
+    { id: "star", label: "Star", icon: "★" },
   ]},
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
@@ -179,6 +183,12 @@ export default function ToonvoEditor() {
   const [hardness, setHardness] = useState(0.8);
   const [flow, setFlow] = useState(1);
   const [recentColors, setRecentColors] = useState<string[]>([]);
+  const [shapeStyle, setShapeStyle] = useState<"fill" | "stroke" | "both">("stroke");
+  const [shapeFill, setShapeFill] = useState("#6c63ff");
+  const [cornerRadius, setCornerRadius] = useState(0);
+  const [polygonSides, setPolygonSides] = useState(6);
+  const [starPoints, setStarPoints] = useState(5);
+  const [starInnerRatio, setStarInnerRatio] = useState(0.5);
 
   const [onion, setOnion] = useState(false);
   const [onionBefore, setOnionBefore] = useState(1);
@@ -230,7 +240,9 @@ export default function ToonvoEditor() {
   const drawingRef = useRef<{
     active: boolean; lastX: number; lastY: number; startX: number; startY: number;
     snapshot?: ImageData; pts: { x: number; y: number; p: number }[];
+    curX?: number; curY?: number; shift?: boolean; alt?: boolean;
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
+  const airbrushTimerRef = useRef<number | null>(null);
 
   const framesRef = useRef(frames);
   const currentRef = useRef(currentFrame);
@@ -657,6 +669,27 @@ export default function ToonvoEditor() {
     }
   };
 
+  // Airbrush: single dab using radial gradient. Hardness controls softness of edges.
+  const airbrushDab = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+    const r = Math.max(2, size);
+    const [cr, cg, cb] = hexToRgb(color);
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    // Higher hardness = sharper center. Convert to inner solid stop.
+    const inner = Math.min(0.95, hardness * 0.9);
+    const centerAlpha = Math.max(0.02, opacity * flow * 0.6);
+    grad.addColorStop(0, `rgba(${cr},${cg},${cb},${centerAlpha})`);
+    grad.addColorStop(inner, `rgba(${cr},${cg},${cb},${centerAlpha * 0.6})`);
+    grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
   const drawStrokeSegment = (
     ctx: CanvasRenderingContext2D, t: Tool, x0: number, y0: number, x1: number, y1: number, pressure: number
   ) => {
@@ -664,19 +697,11 @@ export default function ToonvoEditor() {
     if (t === "airbrush") {
       const dx = x1 - x0, dy = y1 - y0;
       const d = Math.hypot(dx, dy);
-      const steps = Math.max(1, Math.ceil(d / 2));
-      for (let i = 0; i < steps; i++) {
+      const steps = Math.max(1, Math.ceil(d / Math.max(2, size * 0.25)));
+      for (let i = 0; i <= steps; i++) {
         const x = x0 + (dx * i) / steps;
         const y = y0 + (dy * i) / steps;
-        const r = size;
-        for (let k = 0; k < 6; k++) {
-          const a = Math.random() * Math.PI * 2;
-          const rr = Math.random() * r;
-          ctx.globalAlpha = opacity * 0.06 * flow;
-          ctx.beginPath();
-          ctx.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr, 1, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        airbrushDab(ctx, x, y);
       }
       return;
     }
@@ -718,6 +743,98 @@ export default function ToonvoEditor() {
     variants.forEach(([a, b, c, d]) => drawStrokeSegment(ctx, t, a, b, c, d, p));
   };
 
+  // Draw a shape (rect/ellipse/line/polygon/star) with modifiers.
+  const drawShape = (
+    ctx: CanvasRenderingContext2D,
+    t: Tool,
+    sx: number, sy: number, ex: number, ey: number,
+    shift: boolean, alt: boolean,
+  ) => {
+    let x0 = sx, y0 = sy, x1 = ex, y1 = ey;
+    if (t === "rect" || t === "ellipse") {
+      let dx = x1 - x0, dy = y1 - y0;
+      if (shift) {
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        dx = Math.sign(dx || 1) * m; dy = Math.sign(dy || 1) * m;
+      }
+      let rx: number, ry: number, cx: number, cy: number;
+      if (alt) { cx = x0; cy = y0; rx = Math.abs(dx); ry = Math.abs(dy); }
+      else { cx = x0 + dx / 2; cy = y0 + dy / 2; rx = Math.abs(dx) / 2; ry = Math.abs(dy) / 2; }
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(0, size);
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.fillStyle = shapeFill; ctx.strokeStyle = color;
+      ctx.beginPath();
+      if (t === "rect") {
+        const rw = rx * 2, rh = ry * 2;
+        const r = Math.min(cornerRadius, rw / 2, rh / 2);
+        if (r > 0 && (ctx as CanvasRenderingContext2D & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect) {
+          (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(cx - rx, cy - ry, rw, rh, r);
+        } else {
+          ctx.rect(cx - rx, cy - ry, rw, rh);
+        }
+      } else {
+        ctx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+      }
+      if (shapeStyle !== "stroke") ctx.fill();
+      if (shapeStyle !== "fill" && size > 0) ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (t === "line") {
+      if (shift) {
+        const dx = x1 - x0, dy = y1 - y0;
+        const ang = Math.atan2(dy, dx);
+        const snap = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+        const len = Math.hypot(dx, dy);
+        x1 = x0 + Math.cos(snap) * len;
+        y1 = y0 + Math.sin(snap) * len;
+      }
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(1, size);
+      ctx.lineCap = "round"; ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (t === "polygon" || t === "star") {
+      const cx = alt ? x0 : (x0 + x1) / 2;
+      const cy = alt ? y0 : (y0 + y1) / 2;
+      const R = alt ? Math.hypot(x1 - x0, y1 - y0) : Math.hypot(x1 - x0, y1 - y0) / 2;
+      const baseAng = shift ? -Math.PI / 2 : Math.atan2(y1 - cy, x1 - cx);
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(0, size); ctx.lineJoin = "round";
+      ctx.fillStyle = shapeFill; ctx.strokeStyle = color;
+      ctx.beginPath();
+      if (t === "polygon") {
+        const n = Math.max(3, Math.min(20, polygonSides));
+        for (let i = 0; i < n; i++) {
+          const a = baseAng + (i * Math.PI * 2) / n;
+          const px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+      } else {
+        const n = Math.max(3, Math.min(12, starPoints));
+        const rInner = R * Math.max(0.1, Math.min(0.95, starInnerRatio));
+        for (let i = 0; i < n * 2; i++) {
+          const a = baseAng + (i * Math.PI) / n;
+          const rr = i % 2 === 0 ? R : rInner;
+          const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      if (shapeStyle !== "stroke") ctx.fill();
+      if (shapeStyle !== "fill" && size > 0) ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  const isShapeTool = (t: Tool) => t === "rect" || t === "ellipse" || t === "line" || t === "polygon" || t === "star";
+
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -754,11 +871,11 @@ export default function ToonvoEditor() {
       render(); buildThumb(currentFrame);
       return;
     }
-    if (tool === "rect" || tool === "ellipse" || tool === "line") {
-      pushHistory(tool === "rect" ? "Rectangle" : tool === "ellipse" ? "Ellipse" : "Line");
+    if (isShapeTool(tool)) {
+      pushHistory(tool[0].toUpperCase() + tool.slice(1));
       const ctx = layer.canvas.getContext("2d")!;
       const snapshot = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height);
-      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, snapshot, pts: [] };
+      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, snapshot, pts: [], shift: e.shiftKey, alt: e.altKey };
       return;
     }
     if (tool === "eraserStroke") {
@@ -770,7 +887,7 @@ export default function ToonvoEditor() {
     }
 
     pushHistory(TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool);
-    drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
+    drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
     const ctx = layer.canvas.getContext("2d")!;
     if (tool === "eraserHard" || tool === "eraserSoft") {
       ctx.save();
@@ -780,6 +897,19 @@ export default function ToonvoEditor() {
       ctx.lineWidth = size;
       ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+    } else if (tool === "airbrush") {
+      // Immediate dab and start continuous spray timer for stationary hold.
+      airbrushDab(ctx, x, y);
+      if (airbrushTimerRef.current) window.clearInterval(airbrushTimerRef.current);
+      airbrushTimerRef.current = window.setInterval(() => {
+        const dd = drawingRef.current;
+        if (!dd.active) { if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; } return; }
+        const f = framesRef.current[currentRef.current];
+        const l = f?.layers[f.activeLayer];
+        if (!l || l.locked) return;
+        airbrushDab(l.canvas.getContext("2d")!, dd.curX ?? dd.lastX, dd.curY ?? dd.lastY);
+        render();
+      }, 30);
     } else {
       drawWithSymmetry(layer, tool, x, y, x + 0.01, y + 0.01, e.pressure || 0.5);
     }
@@ -807,19 +937,11 @@ export default function ToonvoEditor() {
 
     const { x, y } = eventToCanvas(e);
     const ctx = layer.canvas.getContext("2d")!;
+    drawingRef.current.curX = x; drawingRef.current.curY = y;
 
-    if (tool === "rect" || tool === "ellipse" || tool === "line") {
+    if (isShapeTool(tool)) {
       if (d.snapshot) ctx.putImageData(d.snapshot, 0, 0);
-      applyStrokeStyle(ctx, "pen", 1);
-      ctx.beginPath();
-      if (tool === "rect") {
-        ctx.strokeRect(d.startX, d.startY, x - d.startX, y - d.startY);
-      } else if (tool === "ellipse") {
-        ctx.ellipse((d.startX + x) / 2, (d.startY + y) / 2, Math.abs(x - d.startX) / 2, Math.abs(y - d.startY) / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        ctx.moveTo(d.startX, d.startY); ctx.lineTo(x, y); ctx.stroke();
-      }
+      drawShape(ctx, tool, d.startX, d.startY, x, y, e.shiftKey, e.altKey);
       render();
       return;
     }
@@ -852,6 +974,7 @@ export default function ToonvoEditor() {
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
     panModeRef.current = false;
+    if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; }
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
@@ -1044,6 +1167,12 @@ export default function ToonvoEditor() {
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
+      // Opacity number-key shortcuts
+      if (!e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+        const n = parseInt(e.key, 10);
+        setOpacity(n === 0 ? 1 : n / 10);
+        return;
+      }
       if (e.altKey) setTool("eyedropper");
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1169,13 +1298,38 @@ export default function ToonvoEditor() {
           <input ref={audioFileRef} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/ogg,audio/mp4,audio/x-m4a,.m4a" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importAudio(f); e.target.value = ""; }} />
         </div>
         <div className="toolopts">
-          {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft"].includes(tool) && (
+          <span style={{ fontSize: 11, color: "#8b8ba8", textTransform: "uppercase", letterSpacing: 1 }}>
+            {TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool}
+          </span>
+          {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft","bucket"].includes(tool) && (
             <>
-              <label>Size <input type="range" min={1} max={200} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
-              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /></label>
-              <label>Smooth <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} /></label>
-              <label>Hard <input type="range" min={0} max={100} value={Math.round(hardness*100)} onChange={e => setHardness(+e.target.value/100)} /></label>
-              <label>Flow <input type="range" min={0} max={100} value={Math.round(flow*100)} onChange={e => setFlow(+e.target.value/100)} /></label>
+              <label>Size <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /><span style={{ minWidth: 30 }}>{Math.round(opacity*100)}%</span></label>
+              {tool !== "bucket" && <label>Smooth <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} /></label>}
+              {(tool === "airbrush" || tool === "brush") && <label>Hard <input type="range" min={0} max={100} value={Math.round(hardness*100)} onChange={e => setHardness(+e.target.value/100)} /></label>}
+              {(tool === "airbrush" || tool === "brush" || tool === "marker") && <label>Flow <input type="range" min={1} max={100} value={Math.round(flow*100)} onChange={e => setFlow(+e.target.value/100)} /></label>}
+            </>
+          )}
+          {isShapeTool(tool) && (
+            <>
+              <label>Stroke <input type="range" min={0} max={50} value={size} onChange={e => setSize(+e.target.value)} /><span style={{ minWidth: 24 }}>{size}px</span></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /><span style={{ minWidth: 30 }}>{Math.round(opacity*100)}%</span></label>
+              <label>Stroke <input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
+              {tool !== "line" && <label>Fill <input type="color" value={shapeFill} onChange={e => setShapeFill(e.target.value)} /></label>}
+              {tool !== "line" && (
+                <label>Style
+                  <select value={shapeStyle} onChange={e => setShapeStyle(e.target.value as "fill" | "stroke" | "both")}>
+                    <option value="stroke">Outline</option>
+                    <option value="fill">Filled</option>
+                    <option value="both">Filled + Outline</option>
+                  </select>
+                </label>
+              )}
+              {tool === "rect" && <label>Corner <input type="range" min={0} max={200} value={cornerRadius} onChange={e => setCornerRadius(+e.target.value)} /><span style={{ minWidth: 24 }}>{cornerRadius}</span></label>}
+              {tool === "polygon" && <label>Sides <input type="range" min={3} max={20} value={polygonSides} onChange={e => setPolygonSides(+e.target.value)} /><span style={{ minWidth: 18 }}>{polygonSides}</span></label>}
+              {tool === "star" && <label>Points <input type="range" min={3} max={12} value={starPoints} onChange={e => setStarPoints(+e.target.value)} /><span style={{ minWidth: 18 }}>{starPoints}</span></label>}
+              {tool === "star" && <label>Inner <input type="range" min={10} max={95} value={Math.round(starInnerRatio*100)} onChange={e => setStarInnerRatio(+e.target.value/100)} /></label>}
+              <span style={{ fontSize: 10, color: "#8b8ba8" }}>Shift=constrain · Alt=from center</span>
             </>
           )}
         </div>
@@ -1325,6 +1479,9 @@ export default function ToonvoEditor() {
           {/* Timeline */}
           <div className="timeline">
             <div className="playbar">
+              <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
+              <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
+              <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
               <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
               <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
               <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
