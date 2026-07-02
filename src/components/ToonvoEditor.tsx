@@ -1479,6 +1479,9 @@ export default function ToonvoEditor() {
           {/* Timeline */}
           <div className="timeline">
             <div className="playbar">
+              <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
+              <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
+              <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
               <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
               <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
               <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
