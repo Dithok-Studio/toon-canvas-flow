@@ -57,7 +57,7 @@ interface AudioTrack {
 type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
-  | "bucket" | "rect" | "ellipse" | "line"
+  | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
   | "select" | "lasso" | "move" | "eyedropper";
 
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
@@ -76,11 +76,15 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "eraserSoft", label: "Soft Eraser", icon: "🌫️" },
     { id: "eraserStroke", label: "Stroke Eraser", icon: "❌" },
   ]},
-  { title: "Fill & Shape", tools: [
+  { title: "Fill", tools: [
     { id: "bucket", label: "Bucket", key: "G", icon: "🪣" },
+  ]},
+  { title: "Shapes", tools: [
     { id: "rect", label: "Rectangle", key: "R", icon: "▭" },
     { id: "ellipse", label: "Ellipse", key: "O", icon: "◯" },
     { id: "line", label: "Line", key: "L", icon: "／" },
+    { id: "polygon", label: "Polygon", icon: "⬡" },
+    { id: "star", label: "Star", icon: "★" },
   ]},
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
