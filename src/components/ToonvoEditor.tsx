@@ -183,6 +183,12 @@ export default function ToonvoEditor() {
   const [hardness, setHardness] = useState(0.8);
   const [flow, setFlow] = useState(1);
   const [recentColors, setRecentColors] = useState<string[]>([]);
+  const [shapeStyle, setShapeStyle] = useState<"fill" | "stroke" | "both">("stroke");
+  const [shapeFill, setShapeFill] = useState("#6c63ff");
+  const [cornerRadius, setCornerRadius] = useState(0);
+  const [polygonSides, setPolygonSides] = useState(6);
+  const [starPoints, setStarPoints] = useState(5);
+  const [starInnerRatio, setStarInnerRatio] = useState(0.5);
 
   const [onion, setOnion] = useState(false);
   const [onionBefore, setOnionBefore] = useState(1);
