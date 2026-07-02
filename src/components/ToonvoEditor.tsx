@@ -669,6 +669,27 @@ export default function ToonvoEditor() {
     }
   };
 
+  // Airbrush: single dab using radial gradient. Hardness controls softness of edges.
+  const airbrushDab = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+    const r = Math.max(2, size);
+    const [cr, cg, cb] = hexToRgb(color);
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    // Higher hardness = sharper center. Convert to inner solid stop.
+    const inner = Math.min(0.95, hardness * 0.9);
+    const centerAlpha = Math.max(0.02, opacity * flow * 0.6);
+    grad.addColorStop(0, `rgba(${cr},${cg},${cb},${centerAlpha})`);
+    grad.addColorStop(inner, `rgba(${cr},${cg},${cb},${centerAlpha * 0.6})`);
+    grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
   const drawStrokeSegment = (
     ctx: CanvasRenderingContext2D, t: Tool, x0: number, y0: number, x1: number, y1: number, pressure: number
   ) => {
@@ -676,19 +697,11 @@ export default function ToonvoEditor() {
     if (t === "airbrush") {
       const dx = x1 - x0, dy = y1 - y0;
       const d = Math.hypot(dx, dy);
-      const steps = Math.max(1, Math.ceil(d / 2));
-      for (let i = 0; i < steps; i++) {
+      const steps = Math.max(1, Math.ceil(d / Math.max(2, size * 0.25)));
+      for (let i = 0; i <= steps; i++) {
         const x = x0 + (dx * i) / steps;
         const y = y0 + (dy * i) / steps;
-        const r = size;
-        for (let k = 0; k < 6; k++) {
-          const a = Math.random() * Math.PI * 2;
-          const rr = Math.random() * r;
-          ctx.globalAlpha = opacity * 0.06 * flow;
-          ctx.beginPath();
-          ctx.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr, 1, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        airbrushDab(ctx, x, y);
       }
       return;
     }
