@@ -240,7 +240,9 @@ export default function ToonvoEditor() {
   const drawingRef = useRef<{
     active: boolean; lastX: number; lastY: number; startX: number; startY: number;
     snapshot?: ImageData; pts: { x: number; y: number; p: number }[];
+    curX?: number; curY?: number; shift?: boolean; alt?: boolean;
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
+  const airbrushTimerRef = useRef<number | null>(null);
 
   const framesRef = useRef(frames);
   const currentRef = useRef(currentFrame);
