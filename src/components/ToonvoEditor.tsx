@@ -743,6 +743,98 @@ export default function ToonvoEditor() {
     variants.forEach(([a, b, c, d]) => drawStrokeSegment(ctx, t, a, b, c, d, p));
   };
 
+  // Draw a shape (rect/ellipse/line/polygon/star) with modifiers.
+  const drawShape = (
+    ctx: CanvasRenderingContext2D,
+    t: Tool,
+    sx: number, sy: number, ex: number, ey: number,
+    shift: boolean, alt: boolean,
+  ) => {
+    let x0 = sx, y0 = sy, x1 = ex, y1 = ey;
+    if (t === "rect" || t === "ellipse") {
+      let dx = x1 - x0, dy = y1 - y0;
+      if (shift) {
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        dx = Math.sign(dx || 1) * m; dy = Math.sign(dy || 1) * m;
+      }
+      let rx: number, ry: number, cx: number, cy: number;
+      if (alt) { cx = x0; cy = y0; rx = Math.abs(dx); ry = Math.abs(dy); }
+      else { cx = x0 + dx / 2; cy = y0 + dy / 2; rx = Math.abs(dx) / 2; ry = Math.abs(dy) / 2; }
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(0, size);
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.fillStyle = shapeFill; ctx.strokeStyle = color;
+      ctx.beginPath();
+      if (t === "rect") {
+        const rw = rx * 2, rh = ry * 2;
+        const r = Math.min(cornerRadius, rw / 2, rh / 2);
+        if (r > 0 && (ctx as CanvasRenderingContext2D & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect) {
+          (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(cx - rx, cy - ry, rw, rh, r);
+        } else {
+          ctx.rect(cx - rx, cy - ry, rw, rh);
+        }
+      } else {
+        ctx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+      }
+      if (shapeStyle !== "stroke") ctx.fill();
+      if (shapeStyle !== "fill" && size > 0) ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (t === "line") {
+      if (shift) {
+        const dx = x1 - x0, dy = y1 - y0;
+        const ang = Math.atan2(dy, dx);
+        const snap = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+        const len = Math.hypot(dx, dy);
+        x1 = x0 + Math.cos(snap) * len;
+        y1 = y0 + Math.sin(snap) * len;
+      }
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(1, size);
+      ctx.lineCap = "round"; ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (t === "polygon" || t === "star") {
+      const cx = alt ? x0 : (x0 + x1) / 2;
+      const cy = alt ? y0 : (y0 + y1) / 2;
+      const R = alt ? Math.hypot(x1 - x0, y1 - y0) : Math.hypot(x1 - x0, y1 - y0) / 2;
+      const baseAng = shift ? -Math.PI / 2 : Math.atan2(y1 - cy, x1 - cx);
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = Math.max(0, size); ctx.lineJoin = "round";
+      ctx.fillStyle = shapeFill; ctx.strokeStyle = color;
+      ctx.beginPath();
+      if (t === "polygon") {
+        const n = Math.max(3, Math.min(20, polygonSides));
+        for (let i = 0; i < n; i++) {
+          const a = baseAng + (i * Math.PI * 2) / n;
+          const px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+      } else {
+        const n = Math.max(3, Math.min(12, starPoints));
+        const rInner = R * Math.max(0.1, Math.min(0.95, starInnerRatio));
+        for (let i = 0; i < n * 2; i++) {
+          const a = baseAng + (i * Math.PI) / n;
+          const rr = i % 2 === 0 ? R : rInner;
+          const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      if (shapeStyle !== "stroke") ctx.fill();
+      if (shapeStyle !== "fill" && size > 0) ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  const isShapeTool = (t: Tool) => t === "rect" || t === "ellipse" || t === "line" || t === "polygon" || t === "star";
+
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -779,11 +871,11 @@ export default function ToonvoEditor() {
       render(); buildThumb(currentFrame);
       return;
     }
-    if (tool === "rect" || tool === "ellipse" || tool === "line") {
-      pushHistory(tool === "rect" ? "Rectangle" : tool === "ellipse" ? "Ellipse" : "Line");
+    if (isShapeTool(tool)) {
+      pushHistory(tool[0].toUpperCase() + tool.slice(1));
       const ctx = layer.canvas.getContext("2d")!;
       const snapshot = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height);
-      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, snapshot, pts: [] };
+      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, snapshot, pts: [], shift: e.shiftKey, alt: e.altKey };
       return;
     }
     if (tool === "eraserStroke") {
@@ -795,7 +887,7 @@ export default function ToonvoEditor() {
     }
 
     pushHistory(TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool);
-    drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
+    drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
     const ctx = layer.canvas.getContext("2d")!;
     if (tool === "eraserHard" || tool === "eraserSoft") {
       ctx.save();
@@ -805,6 +897,19 @@ export default function ToonvoEditor() {
       ctx.lineWidth = size;
       ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+    } else if (tool === "airbrush") {
+      // Immediate dab and start continuous spray timer for stationary hold.
+      airbrushDab(ctx, x, y);
+      if (airbrushTimerRef.current) window.clearInterval(airbrushTimerRef.current);
+      airbrushTimerRef.current = window.setInterval(() => {
+        const dd = drawingRef.current;
+        if (!dd.active) { if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; } return; }
+        const f = framesRef.current[currentRef.current];
+        const l = f?.layers[f.activeLayer];
+        if (!l || l.locked) return;
+        airbrushDab(l.canvas.getContext("2d")!, dd.curX ?? dd.lastX, dd.curY ?? dd.lastY);
+        render();
+      }, 30);
     } else {
       drawWithSymmetry(layer, tool, x, y, x + 0.01, y + 0.01, e.pressure || 0.5);
     }
@@ -832,19 +937,11 @@ export default function ToonvoEditor() {
 
     const { x, y } = eventToCanvas(e);
     const ctx = layer.canvas.getContext("2d")!;
+    drawingRef.current.curX = x; drawingRef.current.curY = y;
 
-    if (tool === "rect" || tool === "ellipse" || tool === "line") {
+    if (isShapeTool(tool)) {
       if (d.snapshot) ctx.putImageData(d.snapshot, 0, 0);
-      applyStrokeStyle(ctx, "pen", 1);
-      ctx.beginPath();
-      if (tool === "rect") {
-        ctx.strokeRect(d.startX, d.startY, x - d.startX, y - d.startY);
-      } else if (tool === "ellipse") {
-        ctx.ellipse((d.startX + x) / 2, (d.startY + y) / 2, Math.abs(x - d.startX) / 2, Math.abs(y - d.startY) / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        ctx.moveTo(d.startX, d.startY); ctx.lineTo(x, y); ctx.stroke();
-      }
+      drawShape(ctx, tool, d.startX, d.startY, x, y, e.shiftKey, e.altKey);
       render();
       return;
     }
@@ -877,6 +974,7 @@ export default function ToonvoEditor() {
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
     panModeRef.current = false;
+    if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; }
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
