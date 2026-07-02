@@ -1298,13 +1298,38 @@ export default function ToonvoEditor() {
           <input ref={audioFileRef} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/ogg,audio/mp4,audio/x-m4a,.m4a" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importAudio(f); e.target.value = ""; }} />
         </div>
         <div className="toolopts">
-          {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft"].includes(tool) && (
+          <span style={{ fontSize: 11, color: "#8b8ba8", textTransform: "uppercase", letterSpacing: 1 }}>
+            {TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool}
+          </span>
+          {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft","bucket"].includes(tool) && (
             <>
-              <label>Size <input type="range" min={1} max={200} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
-              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /></label>
-              <label>Smooth <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} /></label>
-              <label>Hard <input type="range" min={0} max={100} value={Math.round(hardness*100)} onChange={e => setHardness(+e.target.value/100)} /></label>
-              <label>Flow <input type="range" min={0} max={100} value={Math.round(flow*100)} onChange={e => setFlow(+e.target.value/100)} /></label>
+              <label>Size <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /><span style={{ minWidth: 30 }}>{Math.round(opacity*100)}%</span></label>
+              {tool !== "bucket" && <label>Smooth <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} /></label>}
+              {(tool === "airbrush" || tool === "brush") && <label>Hard <input type="range" min={0} max={100} value={Math.round(hardness*100)} onChange={e => setHardness(+e.target.value/100)} /></label>}
+              {(tool === "airbrush" || tool === "brush" || tool === "marker") && <label>Flow <input type="range" min={1} max={100} value={Math.round(flow*100)} onChange={e => setFlow(+e.target.value/100)} /></label>}
+            </>
+          )}
+          {isShapeTool(tool) && (
+            <>
+              <label>Stroke <input type="range" min={0} max={50} value={size} onChange={e => setSize(+e.target.value)} /><span style={{ minWidth: 24 }}>{size}px</span></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /><span style={{ minWidth: 30 }}>{Math.round(opacity*100)}%</span></label>
+              <label>Stroke <input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
+              {tool !== "line" && <label>Fill <input type="color" value={shapeFill} onChange={e => setShapeFill(e.target.value)} /></label>}
+              {tool !== "line" && (
+                <label>Style
+                  <select value={shapeStyle} onChange={e => setShapeStyle(e.target.value as "fill" | "stroke" | "both")}>
+                    <option value="stroke">Outline</option>
+                    <option value="fill">Filled</option>
+                    <option value="both">Filled + Outline</option>
+                  </select>
+                </label>
+              )}
+              {tool === "rect" && <label>Corner <input type="range" min={0} max={200} value={cornerRadius} onChange={e => setCornerRadius(+e.target.value)} /><span style={{ minWidth: 24 }}>{cornerRadius}</span></label>}
+              {tool === "polygon" && <label>Sides <input type="range" min={3} max={20} value={polygonSides} onChange={e => setPolygonSides(+e.target.value)} /><span style={{ minWidth: 18 }}>{polygonSides}</span></label>}
+              {tool === "star" && <label>Points <input type="range" min={3} max={12} value={starPoints} onChange={e => setStarPoints(+e.target.value)} /><span style={{ minWidth: 18 }}>{starPoints}</span></label>}
+              {tool === "star" && <label>Inner <input type="range" min={10} max={95} value={Math.round(starInnerRatio*100)} onChange={e => setStarInnerRatio(+e.target.value/100)} /></label>}
+              <span style={{ fontSize: 10, color: "#8b8ba8" }}>Shift=constrain · Alt=from center</span>
             </>
           )}
         </div>
