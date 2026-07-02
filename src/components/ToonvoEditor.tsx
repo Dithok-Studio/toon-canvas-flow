@@ -1167,6 +1167,12 @@ export default function ToonvoEditor() {
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
+      // Opacity number-key shortcuts
+      if (!e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+        const n = parseInt(e.key, 10);
+        setOpacity(n === 0 ? 1 : n / 10);
+        return;
+      }
       if (e.altKey) setTool("eyedropper");
     };
     const onKeyUp = (e: KeyboardEvent) => {
