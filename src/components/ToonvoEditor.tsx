@@ -60,6 +60,12 @@ type Tool =
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
   | "select" | "lasso" | "move" | "eyedropper";
 
+type Selection =
+  | { kind: "rect"; x: number; y: number; w: number; h: number }
+  | { kind: "lasso"; points: { x: number; y: number }[]; bbox: { x: number; y: number; w: number; h: number } };
+
+type Floating = { canvas: HTMLCanvasElement; x: number; y: number };
+
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
   { title: "Stroke", tools: [
     { id: "pen", label: "Pen", key: "P", icon: "✒️" },
