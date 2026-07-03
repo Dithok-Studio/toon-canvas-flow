@@ -230,6 +230,9 @@ export default function ToonvoEditor() {
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
 
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [floating, setFloating] = useState<Floating | null>(null);
+
   const spaceDownRef = useRef(false);
   const [spaceDown, setSpaceDown] = useState(false);
   const panModeRef = useRef(false);
@@ -250,10 +253,25 @@ export default function ToonvoEditor() {
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
   const airbrushTimerRef = useRef<number | null>(null);
 
+  const selectionRef = useRef<Selection | null>(null);
+  const floatingRef = useRef<Floating | null>(null);
+  const clipboardRef = useRef<HTMLCanvasElement | null>(null);
+  const selActionRef = useRef<{ mode: "new-rect" | "new-lasso" | "move-floating" | null; startX: number; startY: number; pts?: { x: number; y: number }[]; origFloatX?: number; origFloatY?: number }>({ mode: null, startX: 0, startY: 0 });
+  const dashOffsetRef = useRef(0);
+  const undoRef = useRef<() => void>(() => {});
+  const redoRef = useRef<() => void>(() => {});
+  const deleteSelRef = useRef<() => void>(() => {});
+  const copySelRef = useRef<(cut: boolean) => void>(() => {});
+  const pasteRef = useRef<() => void>(() => {});
+  const commitFloatRef = useRef<() => void>(() => {});
+  const escapeRef = useRef<() => void>(() => {});
+
   const framesRef = useRef(frames);
   const currentRef = useRef(currentFrame);
   framesRef.current = frames;
   currentRef.current = currentFrame;
+  selectionRef.current = selection;
+  floatingRef.current = floating;
 
   // ------------- Init / lifecycle -------------
   useEffect(() => {
