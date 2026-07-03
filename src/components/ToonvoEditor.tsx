@@ -419,6 +419,11 @@ export default function ToonvoEditor() {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
+    // Floating selection (drawn above layers)
+    if (floating) {
+      ctx.drawImage(floating.canvas, floating.x, floating.y);
+    }
+
     if (showGrid) {
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 1 / scale;
@@ -431,10 +436,41 @@ export default function ToonvoEditor() {
       }
     }
 
+    // Marching-ants selection border (rect or lasso, or floating bbox)
+    const drawSelPath = (s: Selection) => {
+      ctx.beginPath();
+      if (s.kind === "rect") ctx.rect(s.x, s.y, s.w, s.h);
+      else {
+        const p = s.points;
+        if (p.length) {
+          ctx.moveTo(p[0].x, p[0].y);
+          for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+          ctx.closePath();
+        }
+      }
+    };
+    const antsFor: Selection | null = selection
+      ? selection
+      : floating
+        ? { kind: "rect", x: floating.x, y: floating.y, w: floating.canvas.width, h: floating.canvas.height }
+        : null;
+    if (antsFor) {
+      ctx.save();
+      ctx.lineWidth = Math.max(1, 1.5 / scale);
+      ctx.setLineDash([6 / scale, 4 / scale]);
+      ctx.lineDashOffset = -dashOffsetRef.current / scale;
+      ctx.strokeStyle = "#000";
+      drawSelPath(antsFor); ctx.stroke();
+      ctx.lineDashOffset = (-dashOffsetRef.current + 5) / scale;
+      ctx.strokeStyle = "#fff";
+      drawSelPath(antsFor); ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid]);
+  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating]);
 
   // Resize observer
   useEffect(() => {
