@@ -60,6 +60,12 @@ type Tool =
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
   | "select" | "lasso" | "move" | "eyedropper";
 
+type Selection =
+  | { kind: "rect"; x: number; y: number; w: number; h: number }
+  | { kind: "lasso"; points: { x: number; y: number }[]; bbox: { x: number; y: number; w: number; h: number } };
+
+type Floating = { canvas: HTMLCanvasElement; x: number; y: number };
+
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
   { title: "Stroke", tools: [
     { id: "pen", label: "Pen", key: "P", icon: "✒️" },
@@ -224,6 +230,9 @@ export default function ToonvoEditor() {
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
 
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [floating, setFloating] = useState<Floating | null>(null);
+
   const spaceDownRef = useRef(false);
   const [spaceDown, setSpaceDown] = useState(false);
   const panModeRef = useRef(false);
@@ -244,10 +253,25 @@ export default function ToonvoEditor() {
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
   const airbrushTimerRef = useRef<number | null>(null);
 
+  const selectionRef = useRef<Selection | null>(null);
+  const floatingRef = useRef<Floating | null>(null);
+  const clipboardRef = useRef<HTMLCanvasElement | null>(null);
+  const selActionRef = useRef<{ mode: "new-rect" | "new-lasso" | "move-floating" | null; startX: number; startY: number; pts?: { x: number; y: number }[]; origFloatX?: number; origFloatY?: number }>({ mode: null, startX: 0, startY: 0 });
+  const dashOffsetRef = useRef(0);
+  const undoRef = useRef<() => void>(() => {});
+  const redoRef = useRef<() => void>(() => {});
+  const deleteSelRef = useRef<() => void>(() => {});
+  const copySelRef = useRef<(cut: boolean) => void>(() => {});
+  const pasteRef = useRef<() => void>(() => {});
+  const commitFloatRef = useRef<() => void>(() => {});
+  const escapeRef = useRef<() => void>(() => {});
+
   const framesRef = useRef(frames);
   const currentRef = useRef(currentFrame);
   framesRef.current = frames;
   currentRef.current = currentFrame;
+  selectionRef.current = selection;
+  floatingRef.current = floating;
 
   // ------------- Init / lifecycle -------------
   useEffect(() => {
@@ -395,6 +419,11 @@ export default function ToonvoEditor() {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
+    // Floating selection (drawn above layers)
+    if (floating) {
+      ctx.drawImage(floating.canvas, floating.x, floating.y);
+    }
+
     if (showGrid) {
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 1 / scale;
@@ -407,10 +436,41 @@ export default function ToonvoEditor() {
       }
     }
 
+    // Marching-ants selection border (rect or lasso, or floating bbox)
+    const drawSelPath = (s: Selection) => {
+      ctx.beginPath();
+      if (s.kind === "rect") ctx.rect(s.x, s.y, s.w, s.h);
+      else {
+        const p = s.points;
+        if (p.length) {
+          ctx.moveTo(p[0].x, p[0].y);
+          for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+          ctx.closePath();
+        }
+      }
+    };
+    const antsFor: Selection | null = selection
+      ? selection
+      : floating
+        ? { kind: "rect", x: floating.x, y: floating.y, w: floating.canvas.width, h: floating.canvas.height }
+        : null;
+    if (antsFor) {
+      ctx.save();
+      ctx.lineWidth = Math.max(1, 1.5 / scale);
+      ctx.setLineDash([6 / scale, 4 / scale]);
+      ctx.lineDashOffset = -dashOffsetRef.current / scale;
+      ctx.strokeStyle = "#000";
+      drawSelPath(antsFor); ctx.stroke();
+      ctx.lineDashOffset = (-dashOffsetRef.current + 5) / scale;
+      ctx.strokeStyle = "#fff";
+      drawSelPath(antsFor); ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid]);
+  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating]);
 
   // Resize observer
   useEffect(() => {
@@ -641,13 +701,159 @@ export default function ToonvoEditor() {
   const getToolCursor = (t: Tool, spaceDown: boolean): string => {
     if (spaceDown) return "grab";
     if (t === "move") return "grab";
-    if (t === "select") return "crosshair";
+    if (t === "select" || t === "lasso") return "crosshair";
     if (t === "eyedropper") return "crosshair";
     return "none";
   };
   const shouldShowBrushCursor = (t: Tool) => {
-    return !["move", "select", "eyedropper", "bucket"].includes(t);
+    return !["move", "select", "lasso", "eyedropper", "bucket"].includes(t);
   };
+
+  // ------------- Selection helpers -------------
+  const pointInPolygon = (x: number, y: number, pts: { x: number; y: number }[]) => {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+      if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi + 1e-9) + xi)) inside = !inside;
+    }
+    return inside;
+  };
+  const buildSelPath = (ctx: CanvasRenderingContext2D, s: Selection, dx = 0, dy = 0) => {
+    ctx.beginPath();
+    if (s.kind === "rect") ctx.rect(s.x + dx, s.y + dy, s.w, s.h);
+    else {
+      const p = s.points;
+      if (!p.length) return;
+      ctx.moveTo(p[0].x + dx, p[0].y + dy);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x + dx, p[i].y + dy);
+      ctx.closePath();
+    }
+  };
+  const selectionInside = (s: Selection, x: number, y: number) => {
+    const b = s.kind === "rect" ? { x: s.x, y: s.y, w: s.w, h: s.h } : s.bbox;
+    if (x < b.x || y < b.y || x > b.x + b.w || y > b.y + b.h) return false;
+    if (s.kind === "rect") return true;
+    return pointInPolygon(x, y, s.points);
+  };
+  const commitFloating = () => {
+    const f = floatingRef.current;
+    if (!f) return;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (layer && !layer.locked) {
+      const ctx = layer.canvas.getContext("2d")!;
+      ctx.drawImage(f.canvas, f.x, f.y);
+      buildThumb(currentRef.current);
+    }
+    floatingRef.current = null;
+    setFloating(null);
+    render();
+  };
+  const extractSelectionToFloating = (sel: Selection): Floating | null => {
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) return null;
+    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
+    const bx = Math.max(0, Math.floor(bbox.x));
+    const by = Math.max(0, Math.floor(bbox.y));
+    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
+    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
+    pushHistory("Move selection");
+    const tmp = makeCanvas(bw, bh);
+    const tctx = tmp.getContext("2d")!;
+    tctx.save();
+    buildSelPath(tctx, sel, -bx, -by);
+    tctx.clip();
+    tctx.drawImage(layer.canvas, -bx, -by);
+    tctx.restore();
+    const lctx = layer.canvas.getContext("2d")!;
+    lctx.save();
+    buildSelPath(lctx, sel);
+    lctx.clip();
+    lctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    lctx.restore();
+    buildThumb(currentRef.current);
+    return { canvas: tmp, x: bx, y: by };
+  };
+  const deleteSelection = () => {
+    if (floatingRef.current) {
+      floatingRef.current = null;
+      setFloating(null);
+      render();
+      return;
+    }
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) return;
+    pushHistory("Delete selection");
+    const ctx = layer.canvas.getContext("2d")!;
+    ctx.save();
+    buildSelPath(ctx, sel);
+    ctx.clip();
+    ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    ctx.restore();
+    buildThumb(currentRef.current);
+    render();
+  };
+  const copySelection = (cut: boolean) => {
+    const sel = selectionRef.current;
+    const f = floatingRef.current;
+    if (f) {
+      const clip = makeCanvas(f.canvas.width, f.canvas.height);
+      clip.getContext("2d")!.drawImage(f.canvas, 0, 0);
+      clipboardRef.current = clip;
+      if (cut) { floatingRef.current = null; setFloating(null); render(); }
+      return;
+    }
+    if (!sel) return;
+    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer) return;
+    const bx = Math.max(0, Math.floor(bbox.x));
+    const by = Math.max(0, Math.floor(bbox.y));
+    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
+    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
+    const tmp = makeCanvas(bw, bh);
+    const tctx = tmp.getContext("2d")!;
+    tctx.save();
+    buildSelPath(tctx, sel, -bx, -by);
+    tctx.clip();
+    tctx.drawImage(layer.canvas, -bx, -by);
+    tctx.restore();
+    clipboardRef.current = tmp;
+    if (cut) deleteSelection();
+  };
+  const pasteClipboard = () => {
+    const cb = clipboardRef.current;
+    if (!cb) return;
+    commitFloating();
+    const fl: Floating = { canvas: cb, x: (dims.w - cb.width) / 2, y: (dims.h - cb.height) / 2 };
+    floatingRef.current = fl;
+    setFloating(fl);
+    setSelection(null);
+    selectionRef.current = null;
+  };
+  const escapeSelection = () => {
+    if (floatingRef.current) commitFloating();
+    if (selectionRef.current) { selectionRef.current = null; setSelection(null); render(); }
+  };
+
+  // Marching-ants animation
+  useEffect(() => {
+    if (!selection && !floating) return;
+    let raf = 0;
+    const tick = () => {
+      dashOffsetRef.current = (dashOffsetRef.current + 0.4) % 100;
+      render();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [selection, floating, render]);
+
 
   // ------------- Stroke drawing -------------
   const applyStrokeStyle = (ctx: CanvasRenderingContext2D, t: Tool, pressure: number) => {
@@ -855,6 +1061,46 @@ export default function ToonvoEditor() {
     const layer = frame.layers[frame.activeLayer];
     if (!layer) return;
 
+    // ---- Selection / Lasso ----
+    if (tool === "select" || tool === "lasso") {
+      // If clicking inside floating -> start moving it
+      if (floatingRef.current) {
+        const f = floatingRef.current;
+        if (x >= f.x && y >= f.y && x <= f.x + f.canvas.width && y <= f.y + f.canvas.height) {
+          selActionRef.current = { mode: "move-floating", startX: x, startY: y, origFloatX: f.x, origFloatY: f.y };
+          drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+          return;
+        }
+        commitFloating();
+      }
+      // If existing selection and click inside -> cut to floating and start moving
+      if (selectionRef.current && selectionInside(selectionRef.current, x, y)) {
+        const fl = extractSelectionToFloating(selectionRef.current);
+        if (fl) {
+          floatingRef.current = fl; setFloating(fl);
+          selectionRef.current = null; setSelection(null);
+          selActionRef.current = { mode: "move-floating", startX: x, startY: y, origFloatX: fl.x, origFloatY: fl.y };
+          drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+          return;
+        }
+      }
+      // Click outside any selection -> clear and start new
+      if (selectionRef.current) { selectionRef.current = null; setSelection(null); }
+      if (tool === "select") {
+        const sel: Selection = { kind: "rect", x, y, w: 0, h: 0 };
+        selectionRef.current = sel; setSelection(sel);
+        selActionRef.current = { mode: "new-rect", startX: x, startY: y };
+      } else {
+        const pts = [{ x, y }];
+        const sel: Selection = { kind: "lasso", points: pts, bbox: { x, y, w: 0, h: 0 } };
+        selectionRef.current = sel; setSelection(sel);
+        selActionRef.current = { mode: "new-lasso", startX: x, startY: y, pts };
+      }
+      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+      return;
+    }
+
+
     if (tool === "eyedropper") {
       const ctx = layer.canvas.getContext("2d")!;
       if (x >= 0 && y >= 0 && x < layer.canvas.width && y < layer.canvas.height) {
@@ -930,6 +1176,33 @@ export default function ToonvoEditor() {
       return;
     }
 
+    // Selection drag update
+    if (selActionRef.current.mode) {
+      const { x: cx, y: cy } = eventToCanvas(e);
+      const s = selActionRef.current;
+      if (s.mode === "new-rect") {
+        const nx = Math.min(s.startX, cx), ny = Math.min(s.startY, cy);
+        const nw = Math.abs(cx - s.startX), nh = Math.abs(cy - s.startY);
+        const sel: Selection = { kind: "rect", x: nx, y: ny, w: nw, h: nh };
+        selectionRef.current = sel; setSelection(sel);
+      } else if (s.mode === "new-lasso" && s.pts) {
+        const last = s.pts[s.pts.length - 1];
+        if (Math.hypot(cx - last.x, cy - last.y) > 1) {
+          s.pts.push({ x: cx, y: cy });
+          const xs = s.pts.map(p => p.x), ys = s.pts.map(p => p.y);
+          const bx = Math.min(...xs), by = Math.min(...ys);
+          const sel: Selection = { kind: "lasso", points: s.pts.slice(), bbox: { x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by } };
+          selectionRef.current = sel; setSelection(sel);
+        }
+      } else if (s.mode === "move-floating" && floatingRef.current) {
+        const dx = cx - s.startX, dy = cy - s.startY;
+        const nf: Floating = { canvas: floatingRef.current.canvas, x: (s.origFloatX ?? 0) + dx, y: (s.origFloatY ?? 0) + dy };
+        floatingRef.current = nf; setFloating(nf);
+      }
+      return;
+    }
+
+
     const frame = frames[currentFrame];
     if (!frame) return;
     const layer = frame.layers[frame.activeLayer];
@@ -976,6 +1249,19 @@ export default function ToonvoEditor() {
     panModeRef.current = false;
     if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; }
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    // Finalize selection actions
+    if (selActionRef.current.mode) {
+      const m = selActionRef.current.mode;
+      if (m === "new-rect" && selectionRef.current?.kind === "rect") {
+        if (selectionRef.current.w < 2 || selectionRef.current.h < 2) { selectionRef.current = null; setSelection(null); }
+      }
+      if (m === "new-lasso" && selectionRef.current?.kind === "lasso") {
+        if (selectionRef.current.points.length < 3) { selectionRef.current = null; setSelection(null); }
+      }
+      selActionRef.current = { mode: null, startX: 0, startY: 0 };
+      render();
+      return;
+    }
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
       setRecentColors((r) => [color, ...r.filter(c => c !== color)].slice(0, 20));
@@ -1142,32 +1428,48 @@ export default function ToonvoEditor() {
 
 
   // ------------- Keyboard -------------
+  // Keep imperative refs in sync so document listeners never see stale closures.
+  undoRef.current = undo;
+  redoRef.current = redo;
+  deleteSelRef.current = deleteSelection;
+  copySelRef.current = copySelection;
+  pasteRef.current = pasteClipboard;
+  commitFloatRef.current = commitFloating;
+  escapeRef.current = escapeSelection;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
-      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
+      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || (tgt as HTMLElement).isContentEditable);
       if (e.key === " " && !inField) { e.preventDefault(); if (!spaceDownRef.current) { spaceDownRef.current = true; setSpaceDown(true); } return; }
+      // Undo/Redo must work even in fields for common expectation? Keep out of fields.
       if (inField) return;
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-        if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        if (e.key === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
-        if (e.key === "n") { e.preventDefault(); setShowNew(true); return; }
+        const k = e.key.toLowerCase();
+        if (k === "z" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); undoRef.current(); return; }
+        if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); e.stopPropagation(); redoRef.current(); return; }
+        if (k === "c") { e.preventDefault(); copySelRef.current(false); return; }
+        if (k === "x") { e.preventDefault(); copySelRef.current(true); return; }
+        if (k === "v") { e.preventDefault(); pasteRef.current(); return; }
+        if (k === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
+        if (k === "n") { e.preventDefault(); setShowNew(true); return; }
         if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
         if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(z => Math.max(0.05, z / 1.2)); return; }
         if (e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); return; }
-        if (e.key === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
+        if (k === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
         return;
       }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelRef.current(); return; }
+      if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
+      if (e.key === "Enter") { commitFloatRef.current(); return; }
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "line", s: "select", v: "move",
+        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
-      // Opacity number-key shortcuts
       if (!e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
         const n = parseInt(e.key, 10);
         setOpacity(n === 0 ? 1 : n / 10);
@@ -1178,9 +1480,12 @@ export default function ToonvoEditor() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") { spaceDownRef.current = false; setSpaceDown(false); }
     };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKeyUp);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
+    document.addEventListener("keydown", onKey, { capture: true });
+    document.addEventListener("keyup", onKeyUp, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", onKey, { capture: true } as unknown as EventListenerOptions);
+      document.removeEventListener("keyup", onKeyUp, { capture: true } as unknown as EventListenerOptions);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
