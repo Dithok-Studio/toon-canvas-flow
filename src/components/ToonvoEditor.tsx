@@ -701,7 +701,7 @@ export default function ToonvoEditor() {
   const getToolCursor = (t: Tool, spaceDown: boolean): string => {
     if (spaceDown) return "grab";
     if (t === "move") return "grab";
-    if (t === "select") return "crosshair";
+    if (t === "select" || t === "lasso") return "crosshair";
     if (t === "eyedropper") return "crosshair";
     return "none";
   };
