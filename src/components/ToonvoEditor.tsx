@@ -1176,6 +1176,33 @@ export default function ToonvoEditor() {
       return;
     }
 
+    // Selection drag update
+    if (selActionRef.current.mode) {
+      const { x: cx, y: cy } = eventToCanvas(e);
+      const s = selActionRef.current;
+      if (s.mode === "new-rect") {
+        const nx = Math.min(s.startX, cx), ny = Math.min(s.startY, cy);
+        const nw = Math.abs(cx - s.startX), nh = Math.abs(cy - s.startY);
+        const sel: Selection = { kind: "rect", x: nx, y: ny, w: nw, h: nh };
+        selectionRef.current = sel; setSelection(sel);
+      } else if (s.mode === "new-lasso" && s.pts) {
+        const last = s.pts[s.pts.length - 1];
+        if (Math.hypot(cx - last.x, cy - last.y) > 1) {
+          s.pts.push({ x: cx, y: cy });
+          const xs = s.pts.map(p => p.x), ys = s.pts.map(p => p.y);
+          const bx = Math.min(...xs), by = Math.min(...ys);
+          const sel: Selection = { kind: "lasso", points: s.pts.slice(), bbox: { x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by } };
+          selectionRef.current = sel; setSelection(sel);
+        }
+      } else if (s.mode === "move-floating" && floatingRef.current) {
+        const dx = cx - s.startX, dy = cy - s.startY;
+        const nf: Floating = { canvas: floatingRef.current.canvas, x: (s.origFloatX ?? 0) + dx, y: (s.origFloatY ?? 0) + dy };
+        floatingRef.current = nf; setFloating(nf);
+      }
+      return;
+    }
+
+
     const frame = frames[currentFrame];
     if (!frame) return;
     const layer = frame.layers[frame.activeLayer];
