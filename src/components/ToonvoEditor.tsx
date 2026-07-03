@@ -1428,32 +1428,48 @@ export default function ToonvoEditor() {
 
 
   // ------------- Keyboard -------------
+  // Keep imperative refs in sync so document listeners never see stale closures.
+  undoRef.current = undo;
+  redoRef.current = redo;
+  deleteSelRef.current = deleteSelection;
+  copySelRef.current = copySelection;
+  pasteRef.current = pasteClipboard;
+  commitFloatRef.current = commitFloating;
+  escapeRef.current = escapeSelection;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
-      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA");
+      const inField = tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || (tgt as HTMLElement).isContentEditable);
       if (e.key === " " && !inField) { e.preventDefault(); if (!spaceDownRef.current) { spaceDownRef.current = true; setSpaceDown(true); } return; }
+      // Undo/Redo must work even in fields for common expectation? Keep out of fields.
       if (inField) return;
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-        if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        if (e.key === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
-        if (e.key === "n") { e.preventDefault(); setShowNew(true); return; }
+        const k = e.key.toLowerCase();
+        if (k === "z" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); undoRef.current(); return; }
+        if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); e.stopPropagation(); redoRef.current(); return; }
+        if (k === "c") { e.preventDefault(); copySelRef.current(false); return; }
+        if (k === "x") { e.preventDefault(); copySelRef.current(true); return; }
+        if (k === "v") { e.preventDefault(); pasteRef.current(); return; }
+        if (k === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
+        if (k === "n") { e.preventDefault(); setShowNew(true); return; }
         if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
         if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(z => Math.max(0.05, z / 1.2)); return; }
         if (e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); return; }
-        if (e.key === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
+        if (k === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
         return;
       }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelRef.current(); return; }
+      if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
+      if (e.key === "Enter") { commitFloatRef.current(); return; }
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "line", s: "select", v: "move",
+        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
-      // Opacity number-key shortcuts
       if (!e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
         const n = parseInt(e.key, 10);
         setOpacity(n === 0 ? 1 : n / 10);
@@ -1464,9 +1480,12 @@ export default function ToonvoEditor() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") { spaceDownRef.current = false; setSpaceDown(false); }
     };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKeyUp);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
+    document.addEventListener("keydown", onKey, { capture: true });
+    document.addEventListener("keyup", onKeyUp, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", onKey, { capture: true } as unknown as EventListenerOptions);
+      document.removeEventListener("keyup", onKeyUp, { capture: true } as unknown as EventListenerOptions);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
