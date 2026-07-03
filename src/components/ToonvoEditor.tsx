@@ -706,8 +706,154 @@ export default function ToonvoEditor() {
     return "none";
   };
   const shouldShowBrushCursor = (t: Tool) => {
-    return !["move", "select", "eyedropper", "bucket"].includes(t);
+    return !["move", "select", "lasso", "eyedropper", "bucket"].includes(t);
   };
+
+  // ------------- Selection helpers -------------
+  const pointInPolygon = (x: number, y: number, pts: { x: number; y: number }[]) => {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+      if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi + 1e-9) + xi)) inside = !inside;
+    }
+    return inside;
+  };
+  const buildSelPath = (ctx: CanvasRenderingContext2D, s: Selection, dx = 0, dy = 0) => {
+    ctx.beginPath();
+    if (s.kind === "rect") ctx.rect(s.x + dx, s.y + dy, s.w, s.h);
+    else {
+      const p = s.points;
+      if (!p.length) return;
+      ctx.moveTo(p[0].x + dx, p[0].y + dy);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x + dx, p[i].y + dy);
+      ctx.closePath();
+    }
+  };
+  const selectionInside = (s: Selection, x: number, y: number) => {
+    const b = s.kind === "rect" ? { x: s.x, y: s.y, w: s.w, h: s.h } : s.bbox;
+    if (x < b.x || y < b.y || x > b.x + b.w || y > b.y + b.h) return false;
+    if (s.kind === "rect") return true;
+    return pointInPolygon(x, y, s.points);
+  };
+  const commitFloating = () => {
+    const f = floatingRef.current;
+    if (!f) return;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (layer && !layer.locked) {
+      const ctx = layer.canvas.getContext("2d")!;
+      ctx.drawImage(f.canvas, f.x, f.y);
+      buildThumb(currentRef.current);
+    }
+    floatingRef.current = null;
+    setFloating(null);
+    render();
+  };
+  const extractSelectionToFloating = (sel: Selection): Floating | null => {
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) return null;
+    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
+    const bx = Math.max(0, Math.floor(bbox.x));
+    const by = Math.max(0, Math.floor(bbox.y));
+    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
+    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
+    pushHistory("Move selection");
+    const tmp = makeCanvas(bw, bh);
+    const tctx = tmp.getContext("2d")!;
+    tctx.save();
+    buildSelPath(tctx, sel, -bx, -by);
+    tctx.clip();
+    tctx.drawImage(layer.canvas, -bx, -by);
+    tctx.restore();
+    const lctx = layer.canvas.getContext("2d")!;
+    lctx.save();
+    buildSelPath(lctx, sel);
+    lctx.clip();
+    lctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    lctx.restore();
+    buildThumb(currentRef.current);
+    return { canvas: tmp, x: bx, y: by };
+  };
+  const deleteSelection = () => {
+    if (floatingRef.current) {
+      floatingRef.current = null;
+      setFloating(null);
+      render();
+      return;
+    }
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) return;
+    pushHistory("Delete selection");
+    const ctx = layer.canvas.getContext("2d")!;
+    ctx.save();
+    buildSelPath(ctx, sel);
+    ctx.clip();
+    ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    ctx.restore();
+    buildThumb(currentRef.current);
+    render();
+  };
+  const copySelection = (cut: boolean) => {
+    const sel = selectionRef.current;
+    const f = floatingRef.current;
+    if (f) {
+      const clip = makeCanvas(f.canvas.width, f.canvas.height);
+      clip.getContext("2d")!.drawImage(f.canvas, 0, 0);
+      clipboardRef.current = clip;
+      if (cut) { floatingRef.current = null; setFloating(null); render(); }
+      return;
+    }
+    if (!sel) return;
+    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer) return;
+    const bx = Math.max(0, Math.floor(bbox.x));
+    const by = Math.max(0, Math.floor(bbox.y));
+    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
+    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
+    const tmp = makeCanvas(bw, bh);
+    const tctx = tmp.getContext("2d")!;
+    tctx.save();
+    buildSelPath(tctx, sel, -bx, -by);
+    tctx.clip();
+    tctx.drawImage(layer.canvas, -bx, -by);
+    tctx.restore();
+    clipboardRef.current = tmp;
+    if (cut) deleteSelection();
+  };
+  const pasteClipboard = () => {
+    const cb = clipboardRef.current;
+    if (!cb) return;
+    commitFloating();
+    const fl: Floating = { canvas: cb, x: (dims.w - cb.width) / 2, y: (dims.h - cb.height) / 2 };
+    floatingRef.current = fl;
+    setFloating(fl);
+    setSelection(null);
+    selectionRef.current = null;
+  };
+  const escapeSelection = () => {
+    if (floatingRef.current) commitFloating();
+    if (selectionRef.current) { selectionRef.current = null; setSelection(null); render(); }
+  };
+
+  // Marching-ants animation
+  useEffect(() => {
+    if (!selection && !floating) return;
+    let raf = 0;
+    const tick = () => {
+      dashOffsetRef.current = (dashOffsetRef.current + 0.4) % 100;
+      render();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [selection, floating, render]);
+
 
   // ------------- Stroke drawing -------------
   const applyStrokeStyle = (ctx: CanvasRenderingContext2D, t: Tool, pressure: number) => {
