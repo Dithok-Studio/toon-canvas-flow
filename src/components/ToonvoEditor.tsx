@@ -1249,6 +1249,19 @@ export default function ToonvoEditor() {
     panModeRef.current = false;
     if (airbrushTimerRef.current) { window.clearInterval(airbrushTimerRef.current); airbrushTimerRef.current = null; }
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    // Finalize selection actions
+    if (selActionRef.current.mode) {
+      const m = selActionRef.current.mode;
+      if (m === "new-rect" && selectionRef.current?.kind === "rect") {
+        if (selectionRef.current.w < 2 || selectionRef.current.h < 2) { selectionRef.current = null; setSelection(null); }
+      }
+      if (m === "new-lasso" && selectionRef.current?.kind === "lasso") {
+        if (selectionRef.current.points.length < 3) { selectionRef.current = null; setSelection(null); }
+      }
+      selActionRef.current = { mode: null, startX: 0, startY: 0 };
+      render();
+      return;
+    }
     buildThumb(currentFrame);
     if (color !== recentColors[0]) {
       setRecentColors((r) => [color, ...r.filter(c => c !== color)].slice(0, 20));
