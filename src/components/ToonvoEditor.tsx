@@ -1061,6 +1061,46 @@ export default function ToonvoEditor() {
     const layer = frame.layers[frame.activeLayer];
     if (!layer) return;
 
+    // ---- Selection / Lasso ----
+    if (tool === "select" || tool === "lasso") {
+      // If clicking inside floating -> start moving it
+      if (floatingRef.current) {
+        const f = floatingRef.current;
+        if (x >= f.x && y >= f.y && x <= f.x + f.canvas.width && y <= f.y + f.canvas.height) {
+          selActionRef.current = { mode: "move-floating", startX: x, startY: y, origFloatX: f.x, origFloatY: f.y };
+          drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+          return;
+        }
+        commitFloating();
+      }
+      // If existing selection and click inside -> cut to floating and start moving
+      if (selectionRef.current && selectionInside(selectionRef.current, x, y)) {
+        const fl = extractSelectionToFloating(selectionRef.current);
+        if (fl) {
+          floatingRef.current = fl; setFloating(fl);
+          selectionRef.current = null; setSelection(null);
+          selActionRef.current = { mode: "move-floating", startX: x, startY: y, origFloatX: fl.x, origFloatY: fl.y };
+          drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+          return;
+        }
+      }
+      // Click outside any selection -> clear and start new
+      if (selectionRef.current) { selectionRef.current = null; setSelection(null); }
+      if (tool === "select") {
+        const sel: Selection = { kind: "rect", x, y, w: 0, h: 0 };
+        selectionRef.current = sel; setSelection(sel);
+        selActionRef.current = { mode: "new-rect", startX: x, startY: y };
+      } else {
+        const pts = [{ x, y }];
+        const sel: Selection = { kind: "lasso", points: pts, bbox: { x, y, w: 0, h: 0 } };
+        selectionRef.current = sel; setSelection(sel);
+        selActionRef.current = { mode: "new-lasso", startX: x, startY: y, pts };
+      }
+      drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+      return;
+    }
+
+
     if (tool === "eyedropper") {
       const ctx = layer.canvas.getContext("2d")!;
       if (x >= 0 && y >= 0 && x < layer.canvas.width && y < layer.canvas.height) {
