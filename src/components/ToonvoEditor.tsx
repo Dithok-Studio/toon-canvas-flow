@@ -58,7 +58,7 @@ type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
-  | "select" | "lasso" | "move" | "eyedropper";
+  | "select" | "lasso" | "move" | "eyedropper" | "text";
 
 type Selection =
   | { kind: "rect"; x: number; y: number; w: number; h: number }
@@ -92,12 +92,21 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "polygon", label: "Polygon", icon: "⬡" },
     { id: "star", label: "Star", icon: "★" },
   ]},
+  { title: "Text", tools: [
+    { id: "text", label: "Text", key: "T", icon: "T" },
+  ]},
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
     { id: "lasso", label: "Lasso", icon: "🪢" },
     { id: "move", label: "Pan", key: "V", icon: "✥" },
     { id: "eyedropper", label: "Eyedropper", icon: "💧" },
   ]},
+];
+
+const FONT_FAMILIES = [
+  "Arial", "Helvetica", "Times New Roman", "Georgia", "Courier New",
+  "Comic Sans MS", "Impact", "Trebuchet MS", "Verdana", "Roboto",
+  "Palatino Linotype", "Lucida Console", "Tahoma", "Garamond",
 ];
 
 const PALETTES: Record<string, string[]> = {
