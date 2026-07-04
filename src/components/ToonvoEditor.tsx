@@ -58,7 +58,7 @@ type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
-  | "select" | "lasso" | "move" | "eyedropper";
+  | "select" | "lasso" | "move" | "eyedropper" | "text";
 
 type Selection =
   | { kind: "rect"; x: number; y: number; w: number; h: number }
@@ -92,12 +92,21 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "polygon", label: "Polygon", icon: "⬡" },
     { id: "star", label: "Star", icon: "★" },
   ]},
+  { title: "Text", tools: [
+    { id: "text", label: "Text", key: "T", icon: "T" },
+  ]},
   { title: "Transform", tools: [
     { id: "select", label: "Select", key: "S", icon: "⬚" },
     { id: "lasso", label: "Lasso", icon: "🪢" },
     { id: "move", label: "Pan", key: "V", icon: "✥" },
     { id: "eyedropper", label: "Eyedropper", icon: "💧" },
   ]},
+];
+
+const FONT_FAMILIES = [
+  "Arial", "Helvetica", "Times New Roman", "Georgia", "Courier New",
+  "Comic Sans MS", "Impact", "Trebuchet MS", "Verdana", "Roboto",
+  "Palatino Linotype", "Lucida Console", "Tahoma", "Garamond",
 ];
 
 const PALETTES: Record<string, string[]> = {
@@ -196,6 +205,30 @@ export default function ToonvoEditor() {
   const [starPoints, setStarPoints] = useState(5);
   const [starInnerRatio, setStarInnerRatio] = useState(0.5);
 
+  // Text tool state
+  const [textFont, setTextFont] = useState("Arial");
+  const [textSize, setTextSize] = useState(48);
+  const [textBold, setTextBold] = useState(false);
+  const [textItalic, setTextItalic] = useState(false);
+  const [textUnderline, setTextUnderline] = useState(false);
+  const [textColor, setTextColor] = useState("#ffffff");
+  const [textOpacity, setTextOpacity] = useState(1);
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
+  const [textLetterSpacing, setTextLetterSpacing] = useState(0);
+  const [textLineHeight, setTextLineHeight] = useState(1.2);
+  const [textOutlineOn, setTextOutlineOn] = useState(false);
+  const [textOutlineColor, setTextOutlineColor] = useState("#000000");
+  const [textOutlineWidth, setTextOutlineWidth] = useState(2);
+  const [textShadowOn, setTextShadowOn] = useState(false);
+  const [textShadowX, setTextShadowX] = useState(3);
+  const [textShadowY, setTextShadowY] = useState(3);
+  const [textShadowBlur, setTextShadowBlur] = useState(6);
+  const [textShadowColor, setTextShadowColor] = useState("#000000");
+  const [textBgOn, setTextBgOn] = useState(false);
+  const [textBgColor, setTextBgColor] = useState("#000000");
+  const [textBgPadding, setTextBgPadding] = useState(6);
+  const [textEditing, setTextEditing] = useState<{ canvasX: number; canvasY: number; value: string } | null>(null);
+
   const [onion, setOnion] = useState(false);
   const [onionBefore, setOnionBefore] = useState(1);
   const [onionAfter, setOnionAfter] = useState(1);
@@ -252,6 +285,8 @@ export default function ToonvoEditor() {
     curX?: number; curY?: number; shift?: boolean; alt?: boolean;
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
   const airbrushTimerRef = useRef<number | null>(null);
+  const pushHistoryRef = useRef<((label: string) => void) | null>(null);
+  const buildThumbRef = useRef<((i: number) => void) | null>(null);
 
   const selectionRef = useRef<Selection | null>(null);
   const floatingRef = useRef<Floating | null>(null);
@@ -548,6 +583,10 @@ export default function ToonvoEditor() {
     });
   };
 
+  // Expose to text tool commit
+  pushHistoryRef.current = pushHistory;
+  buildThumbRef.current = buildThumb;
+
   const undo = () => {
     setHistory((h) => {
       if (h.length === 0) return h;
@@ -703,11 +742,112 @@ export default function ToonvoEditor() {
     if (t === "move") return "grab";
     if (t === "select" || t === "lasso") return "crosshair";
     if (t === "eyedropper") return "crosshair";
+    if (t === "text") return "text";
     return "none";
   };
   const shouldShowBrushCursor = (t: Tool) => {
-    return !["move", "select", "lasso", "eyedropper", "bucket"].includes(t);
+    return !["move", "select", "lasso", "eyedropper", "bucket", "text"].includes(t);
   };
+
+  // ------------- Text tool helpers -------------
+  const fontString = () =>
+    `${textItalic ? "italic " : ""}${textBold ? "700 " : "400 "}${textSize}px "${textFont}", sans-serif`;
+
+  const commitText = useCallback(() => {
+    const te = textEditing;
+    if (!te || !te.value) { setTextEditing(null); return; }
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) { setTextEditing(null); return; }
+    pushHistoryRef.current?.("Text");
+    const ctx = layer.canvas.getContext("2d")!;
+    ctx.save();
+    ctx.globalAlpha = textOpacity;
+    ctx.font = fontString();
+    ctx.textBaseline = "top";
+    ctx.textAlign = textAlign;
+
+    const lines = te.value.split("\n");
+    const lineH = textSize * textLineHeight;
+
+    // Measure widths (with letter-spacing)
+    const measure = (s: string) => {
+      const base = ctx.measureText(s).width;
+      const extra = textLetterSpacing * Math.max(0, s.length - 1);
+      return base + extra;
+    };
+
+    // Background pill
+    if (textBgOn) {
+      const maxW = Math.max(1, ...lines.map(measure));
+      const totalH = lineH * lines.length;
+      let bgX = te.canvasX;
+      if (textAlign === "center") bgX -= maxW / 2;
+      else if (textAlign === "right") bgX -= maxW;
+      ctx.fillStyle = textBgColor;
+      ctx.fillRect(bgX - textBgPadding, te.canvasY - textBgPadding, maxW + textBgPadding * 2, totalH + textBgPadding * 2);
+    }
+
+    // Shadow via canvas shadow
+    if (textShadowOn) {
+      ctx.shadowColor = textShadowColor;
+      ctx.shadowOffsetX = textShadowX;
+      ctx.shadowOffsetY = textShadowY;
+      ctx.shadowBlur = textShadowBlur;
+    }
+
+    lines.forEach((line, i) => {
+      const y = te.canvasY + i * lineH;
+      if (textLetterSpacing === 0) {
+        if (textOutlineOn && textOutlineWidth > 0) {
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = textOutlineColor;
+          ctx.lineWidth = textOutlineWidth * 2;
+          ctx.strokeText(line, te.canvasX, y);
+        }
+        ctx.fillStyle = textColor;
+        ctx.fillText(line, te.canvasX, y);
+        if (textUnderline) {
+          const w = measure(line);
+          let ux = te.canvasX;
+          if (textAlign === "center") ux -= w / 2;
+          else if (textAlign === "right") ux -= w;
+          ctx.fillRect(ux, y + textSize * 0.95, w, Math.max(1, textSize * 0.06));
+        }
+      } else {
+        // Manual letter-spacing: advance per char
+        const w = measure(line);
+        let x = te.canvasX;
+        if (textAlign === "center") x -= w / 2;
+        else if (textAlign === "right") x -= w;
+        ctx.textAlign = "left";
+        for (const ch of line) {
+          if (textOutlineOn && textOutlineWidth > 0) {
+            ctx.lineJoin = "round";
+            ctx.strokeStyle = textOutlineColor;
+            ctx.lineWidth = textOutlineWidth * 2;
+            ctx.strokeText(ch, x, y);
+          }
+          ctx.fillStyle = textColor;
+          ctx.fillText(ch, x, y);
+          x += ctx.measureText(ch).width + textLetterSpacing;
+        }
+        if (textUnderline) {
+          ctx.fillRect(te.canvasX + (textAlign === "center" ? -w / 2 : textAlign === "right" ? -w : 0), y + textSize * 0.95, w, Math.max(1, textSize * 0.06));
+        }
+        ctx.textAlign = textAlign;
+      }
+    });
+
+    ctx.restore();
+    setTextEditing(null);
+    buildThumbRef.current?.(currentRef.current);
+    render();
+  }, [textEditing, textOpacity, textAlign, textLetterSpacing, textLineHeight, textBgOn, textBgColor, textBgPadding, textShadowOn, textShadowColor, textShadowX, textShadowY, textShadowBlur, textOutlineOn, textOutlineColor, textOutlineWidth, textColor, textUnderline, textSize, textFont, textBold, textItalic, render]);
+
+  const commitTextRef = useRef(commitText);
+  useEffect(() => { commitTextRef.current = commitText; }, [commitText]);
+
 
   // ------------- Selection helpers -------------
   const pointInPolygon = (x: number, y: number, pts: { x: number; y: number }[]) => {
@@ -1109,6 +1249,12 @@ export default function ToonvoEditor() {
       }
       return;
     }
+    if (tool === "text") {
+      // If already editing, commit first, then place new cursor at click.
+      if (textEditing) commitTextRef.current?.();
+      setTextEditing({ canvasX: x, canvasY: y, value: "" });
+      return;
+    }
     if (layer.locked) return;
 
     if (tool === "bucket") {
@@ -1465,7 +1611,7 @@ export default function ToonvoEditor() {
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move",
+        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
@@ -1637,6 +1783,48 @@ export default function ToonvoEditor() {
               <span style={{ fontSize: 10, color: "#8b8ba8" }}>Shift=constrain · Alt=from center</span>
             </>
           )}
+          {tool === "text" && (
+            <>
+              <label>Font
+                <select value={textFont} onChange={e => setTextFont(e.target.value)} style={{ maxWidth: 130 }}>
+                  {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+                </select>
+              </label>
+              <label>Size <input type="number" min={1} max={500} value={textSize} onChange={e => setTextSize(Math.max(1, Math.min(500, +e.target.value || 1)))} style={{ width: 52 }} /></label>
+              <button onClick={() => setTextBold(v => !v)} title="Bold" style={{ fontWeight: 700, background: textBold ? "#6c63ff" : undefined }}>B</button>
+              <button onClick={() => setTextItalic(v => !v)} title="Italic" style={{ fontStyle: "italic", background: textItalic ? "#6c63ff" : undefined }}>I</button>
+              <button onClick={() => setTextUnderline(v => !v)} title="Underline" style={{ textDecoration: "underline", background: textUnderline ? "#6c63ff" : undefined }}>U</button>
+              <label>Color <input type="color" value={textColor} onChange={e => setTextColor(e.target.value)} /></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(textOpacity * 100)} onChange={e => setTextOpacity(+e.target.value / 100)} /><span style={{ minWidth: 30 }}>{Math.round(textOpacity * 100)}%</span></label>
+              <label>Align
+                <select value={textAlign} onChange={e => setTextAlign(e.target.value as "left" | "center" | "right")}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+              <label title="Letter spacing">L-Sp <input type="range" min={-10} max={40} value={textLetterSpacing} onChange={e => setTextLetterSpacing(+e.target.value)} style={{ width: 60 }} /></label>
+              <label title="Line height">Line <input type="range" min={80} max={250} value={Math.round(textLineHeight * 100)} onChange={e => setTextLineHeight(+e.target.value / 100)} style={{ width: 60 }} /></label>
+              <button onClick={() => setTextOutlineOn(v => !v)} style={{ background: textOutlineOn ? "#6c63ff" : undefined }} title="Outline">◌ Out</button>
+              {textOutlineOn && <>
+                <input type="color" value={textOutlineColor} onChange={e => setTextOutlineColor(e.target.value)} title="Outline color" />
+                <input type="range" min={1} max={20} value={textOutlineWidth} onChange={e => setTextOutlineWidth(+e.target.value)} title="Outline width" style={{ width: 60 }} />
+              </>}
+              <button onClick={() => setTextShadowOn(v => !v)} style={{ background: textShadowOn ? "#6c63ff" : undefined }} title="Shadow">◐ Shd</button>
+              {textShadowOn && <>
+                <input type="color" value={textShadowColor} onChange={e => setTextShadowColor(e.target.value)} title="Shadow color" />
+                <label title="Shadow X">X <input type="range" min={-30} max={30} value={textShadowX} onChange={e => setTextShadowX(+e.target.value)} style={{ width: 50 }} /></label>
+                <label title="Shadow Y">Y <input type="range" min={-30} max={30} value={textShadowY} onChange={e => setTextShadowY(+e.target.value)} style={{ width: 50 }} /></label>
+                <label title="Shadow blur">Blur <input type="range" min={0} max={40} value={textShadowBlur} onChange={e => setTextShadowBlur(+e.target.value)} style={{ width: 50 }} /></label>
+              </>}
+              <button onClick={() => setTextBgOn(v => !v)} style={{ background: textBgOn ? "#6c63ff" : undefined }} title="Background highlight">▮ BG</button>
+              {textBgOn && <>
+                <input type="color" value={textBgColor} onChange={e => setTextBgColor(e.target.value)} title="Background color" />
+                <input type="range" min={0} max={40} value={textBgPadding} onChange={e => setTextBgPadding(+e.target.value)} title="Background padding" style={{ width: 50 }} />
+              </>}
+              {textEditing && <button onClick={() => commitTextRef.current?.()} title="Confirm (Esc)" style={{ background: "#3aa856" }}>✓ Apply</button>}
+            </>
+          )}
         </div>
         <div className="topright">
           <span className="dim">{dims.w}×{dims.h} • {fps}fps</span>
@@ -1715,6 +1903,55 @@ export default function ToonvoEditor() {
                 <div style={{ position: "absolute", left: "50%", top: "50%", width: 2, height: 2, background: "#fff", boxShadow: "0 0 0 1px #000", transform: "translate(-50%,-50%)" }} />
               </div>
             )}
+            {textEditing && (() => {
+              const v = viewRef.current;
+              const sx = textEditing.canvasX * v.scale + v.offX;
+              const sy = textEditing.canvasY * v.scale + v.offY;
+              const displaySize = textSize * v.scale;
+              return (
+                <textarea
+                  autoFocus
+                  value={textEditing.value}
+                  onChange={e => setTextEditing(te => te ? { ...te, value: e.target.value } : te)}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { e.preventDefault(); commitTextRef.current?.(); }
+                    // Enter inserts newline (default). Ctrl+Enter also commits.
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitTextRef.current?.(); }
+                  }}
+                  onBlur={() => commitTextRef.current?.()}
+                  placeholder="Type text…"
+                  style={{
+                    position: "absolute",
+                    left: sx, top: sy,
+                    transform: textAlign === "center" ? "translateX(-50%)" : textAlign === "right" ? "translateX(-100%)" : undefined,
+                    minWidth: Math.max(80, displaySize * 4),
+                    minHeight: displaySize * textLineHeight,
+                    padding: 2,
+                    margin: 0,
+                    background: textBgOn ? textBgColor : "rgba(0,0,0,0.08)",
+                    color: textColor,
+                    opacity: textOpacity,
+                    fontFamily: `"${textFont}", sans-serif`,
+                    fontSize: displaySize,
+                    fontWeight: textBold ? 700 : 400,
+                    fontStyle: textItalic ? "italic" : "normal",
+                    textDecoration: textUnderline ? "underline" : "none",
+                    textAlign,
+                    letterSpacing: textLetterSpacing * v.scale,
+                    lineHeight: textLineHeight,
+                    border: "1px dashed #6c63ff",
+                    outline: "none",
+                    resize: "none",
+                    overflow: "hidden",
+                    whiteSpace: "pre",
+                    caretColor: textColor,
+                    textShadow: textShadowOn ? `${textShadowX * v.scale}px ${textShadowY * v.scale}px ${textShadowBlur * v.scale}px ${textShadowColor}` : undefined,
+                    WebkitTextStroke: textOutlineOn ? `${textOutlineWidth * v.scale}px ${textOutlineColor}` : undefined,
+                    boxSizing: "content-box",
+                  }}
+                />
+              );
+            })()}
           </div>
 
           {/* Status bar */}
