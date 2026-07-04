@@ -1783,6 +1783,48 @@ export default function ToonvoEditor() {
               <span style={{ fontSize: 10, color: "#8b8ba8" }}>Shift=constrain · Alt=from center</span>
             </>
           )}
+          {tool === "text" && (
+            <>
+              <label>Font
+                <select value={textFont} onChange={e => setTextFont(e.target.value)} style={{ maxWidth: 130 }}>
+                  {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+                </select>
+              </label>
+              <label>Size <input type="number" min={1} max={500} value={textSize} onChange={e => setTextSize(Math.max(1, Math.min(500, +e.target.value || 1)))} style={{ width: 52 }} /></label>
+              <button onClick={() => setTextBold(v => !v)} title="Bold" style={{ fontWeight: 700, background: textBold ? "#6c63ff" : undefined }}>B</button>
+              <button onClick={() => setTextItalic(v => !v)} title="Italic" style={{ fontStyle: "italic", background: textItalic ? "#6c63ff" : undefined }}>I</button>
+              <button onClick={() => setTextUnderline(v => !v)} title="Underline" style={{ textDecoration: "underline", background: textUnderline ? "#6c63ff" : undefined }}>U</button>
+              <label>Color <input type="color" value={textColor} onChange={e => setTextColor(e.target.value)} /></label>
+              <label>Opacity <input type="range" min={0} max={100} value={Math.round(textOpacity * 100)} onChange={e => setTextOpacity(+e.target.value / 100)} /><span style={{ minWidth: 30 }}>{Math.round(textOpacity * 100)}%</span></label>
+              <label>Align
+                <select value={textAlign} onChange={e => setTextAlign(e.target.value as "left" | "center" | "right")}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+              <label title="Letter spacing">L-Sp <input type="range" min={-10} max={40} value={textLetterSpacing} onChange={e => setTextLetterSpacing(+e.target.value)} style={{ width: 60 }} /></label>
+              <label title="Line height">Line <input type="range" min={80} max={250} value={Math.round(textLineHeight * 100)} onChange={e => setTextLineHeight(+e.target.value / 100)} style={{ width: 60 }} /></label>
+              <button onClick={() => setTextOutlineOn(v => !v)} style={{ background: textOutlineOn ? "#6c63ff" : undefined }} title="Outline">◌ Out</button>
+              {textOutlineOn && <>
+                <input type="color" value={textOutlineColor} onChange={e => setTextOutlineColor(e.target.value)} title="Outline color" />
+                <input type="range" min={1} max={20} value={textOutlineWidth} onChange={e => setTextOutlineWidth(+e.target.value)} title="Outline width" style={{ width: 60 }} />
+              </>}
+              <button onClick={() => setTextShadowOn(v => !v)} style={{ background: textShadowOn ? "#6c63ff" : undefined }} title="Shadow">◐ Shd</button>
+              {textShadowOn && <>
+                <input type="color" value={textShadowColor} onChange={e => setTextShadowColor(e.target.value)} title="Shadow color" />
+                <label title="Shadow X">X <input type="range" min={-30} max={30} value={textShadowX} onChange={e => setTextShadowX(+e.target.value)} style={{ width: 50 }} /></label>
+                <label title="Shadow Y">Y <input type="range" min={-30} max={30} value={textShadowY} onChange={e => setTextShadowY(+e.target.value)} style={{ width: 50 }} /></label>
+                <label title="Shadow blur">Blur <input type="range" min={0} max={40} value={textShadowBlur} onChange={e => setTextShadowBlur(+e.target.value)} style={{ width: 50 }} /></label>
+              </>}
+              <button onClick={() => setTextBgOn(v => !v)} style={{ background: textBgOn ? "#6c63ff" : undefined }} title="Background highlight">▮ BG</button>
+              {textBgOn && <>
+                <input type="color" value={textBgColor} onChange={e => setTextBgColor(e.target.value)} title="Background color" />
+                <input type="range" min={0} max={40} value={textBgPadding} onChange={e => setTextBgPadding(+e.target.value)} title="Background padding" style={{ width: 50 }} />
+              </>}
+              {textEditing && <button onClick={() => commitTextRef.current?.()} title="Confirm (Esc)" style={{ background: "#3aa856" }}>✓ Apply</button>}
+            </>
+          )}
         </div>
         <div className="topright">
           <span className="dim">{dims.w}×{dims.h} • {fps}fps</span>
