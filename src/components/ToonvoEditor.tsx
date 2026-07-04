@@ -1611,7 +1611,7 @@ export default function ToonvoEditor() {
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move",
+        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
