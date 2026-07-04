@@ -736,11 +736,114 @@ export default function ToonvoEditor() {
     if (t === "move") return "grab";
     if (t === "select" || t === "lasso") return "crosshair";
     if (t === "eyedropper") return "crosshair";
+    if (t === "text") return "text";
     return "none";
   };
   const shouldShowBrushCursor = (t: Tool) => {
-    return !["move", "select", "lasso", "eyedropper", "bucket"].includes(t);
+    return !["move", "select", "lasso", "eyedropper", "bucket", "text"].includes(t);
   };
+
+  // ------------- Text tool helpers -------------
+  const fontString = () =>
+    `${textItalic ? "italic " : ""}${textBold ? "700 " : "400 "}${textSize}px "${textFont}", sans-serif`;
+
+  const commitText = useCallback(() => {
+    const te = textEditing;
+    if (!te || !te.value) { setTextEditing(null); return; }
+    const frame = framesRef.current[currentRef.current];
+    const layer = frame?.layers[frame.activeLayer];
+    if (!layer || layer.locked) { setTextEditing(null); return; }
+    pushHistoryRef.current?.("Text");
+    const ctx = layer.canvas.getContext("2d")!;
+    ctx.save();
+    ctx.globalAlpha = textOpacity;
+    ctx.font = fontString();
+    ctx.textBaseline = "top";
+    ctx.textAlign = textAlign;
+
+    const lines = te.value.split("\n");
+    const lineH = textSize * textLineHeight;
+
+    // Measure widths (with letter-spacing)
+    const measure = (s: string) => {
+      const base = ctx.measureText(s).width;
+      const extra = textLetterSpacing * Math.max(0, s.length - 1);
+      return base + extra;
+    };
+
+    // Background pill
+    if (textBgOn) {
+      const maxW = Math.max(1, ...lines.map(measure));
+      const totalH = lineH * lines.length;
+      let bgX = te.canvasX;
+      if (textAlign === "center") bgX -= maxW / 2;
+      else if (textAlign === "right") bgX -= maxW;
+      ctx.fillStyle = textBgColor;
+      ctx.fillRect(bgX - textBgPadding, te.canvasY - textBgPadding, maxW + textBgPadding * 2, totalH + textBgPadding * 2);
+    }
+
+    // Shadow via canvas shadow
+    if (textShadowOn) {
+      ctx.shadowColor = textShadowColor;
+      ctx.shadowOffsetX = textShadowX;
+      ctx.shadowOffsetY = textShadowY;
+      ctx.shadowBlur = textShadowBlur;
+    }
+
+    lines.forEach((line, i) => {
+      const y = te.canvasY + i * lineH;
+      if (textLetterSpacing === 0) {
+        if (textOutlineOn && textOutlineWidth > 0) {
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = textOutlineColor;
+          ctx.lineWidth = textOutlineWidth * 2;
+          ctx.strokeText(line, te.canvasX, y);
+        }
+        ctx.fillStyle = textColor;
+        ctx.fillText(line, te.canvasX, y);
+        if (textUnderline) {
+          const w = measure(line);
+          let ux = te.canvasX;
+          if (textAlign === "center") ux -= w / 2;
+          else if (textAlign === "right") ux -= w;
+          ctx.fillRect(ux, y + textSize * 0.95, w, Math.max(1, textSize * 0.06));
+        }
+      } else {
+        // Manual letter-spacing: advance per char
+        const w = measure(line);
+        let x = te.canvasX;
+        if (textAlign === "center") x -= w / 2;
+        else if (textAlign === "right") x -= w;
+        ctx.textAlign = "left";
+        for (const ch of line) {
+          if (textOutlineOn && textOutlineWidth > 0) {
+            ctx.lineJoin = "round";
+            ctx.strokeStyle = textOutlineColor;
+            ctx.lineWidth = textOutlineWidth * 2;
+            ctx.strokeText(ch, x, y);
+          }
+          ctx.fillStyle = textColor;
+          ctx.fillText(ch, x, y);
+          x += ctx.measureText(ch).width + textLetterSpacing;
+        }
+        if (textUnderline) {
+          ctx.fillRect(te.canvasX + (textAlign === "center" ? -w / 2 : textAlign === "right" ? -w : 0), y + textSize * 0.95, w, Math.max(1, textSize * 0.06));
+        }
+        ctx.textAlign = textAlign;
+      }
+    });
+
+    ctx.restore();
+    setTextEditing(null);
+    buildThumbRef.current?.(currentRef.current);
+    render();
+  }, [textEditing, textOpacity, textAlign, textLetterSpacing, textLineHeight, textBgOn, textBgColor, textBgPadding, textShadowOn, textShadowColor, textShadowX, textShadowY, textShadowBlur, textOutlineOn, textOutlineColor, textOutlineWidth, textColor, textUnderline, textSize, textFont, textBold, textItalic, render]);
+
+  const commitTextRef = useRef(commitText);
+  useEffect(() => { commitTextRef.current = commitText; }, [commitText]);
+
+  const pushHistoryRef = useRef<((label: string) => void) | null>(null);
+  const buildThumbRef = useRef<((i: number) => void) | null>(null);
 
   // ------------- Selection helpers -------------
   const pointInPolygon = (x: number, y: number, pts: { x: number; y: number }[]) => {
