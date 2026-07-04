@@ -1249,6 +1249,12 @@ export default function ToonvoEditor() {
       }
       return;
     }
+    if (tool === "text") {
+      // If already editing, commit first, then place new cursor at click.
+      if (textEditing) commitTextRef.current?.();
+      setTextEditing({ canvasX: x, canvasY: y, value: "" });
+      return;
+    }
     if (layer.locked) return;
 
     if (tool === "bucket") {
