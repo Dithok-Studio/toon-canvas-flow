@@ -581,6 +581,10 @@ export default function ToonvoEditor() {
     });
   };
 
+  // Expose to text tool commit
+  pushHistoryRef.current = pushHistory;
+  buildThumbRef.current = buildThumb;
+
   const undo = () => {
     setHistory((h) => {
       if (h.length === 0) return h;
