@@ -1903,6 +1903,55 @@ export default function ToonvoEditor() {
                 <div style={{ position: "absolute", left: "50%", top: "50%", width: 2, height: 2, background: "#fff", boxShadow: "0 0 0 1px #000", transform: "translate(-50%,-50%)" }} />
               </div>
             )}
+            {textEditing && (() => {
+              const v = viewRef.current;
+              const sx = textEditing.canvasX * v.scale + v.offX;
+              const sy = textEditing.canvasY * v.scale + v.offY;
+              const displaySize = textSize * v.scale;
+              return (
+                <textarea
+                  autoFocus
+                  value={textEditing.value}
+                  onChange={e => setTextEditing(te => te ? { ...te, value: e.target.value } : te)}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { e.preventDefault(); commitTextRef.current?.(); }
+                    // Enter inserts newline (default). Ctrl+Enter also commits.
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitTextRef.current?.(); }
+                  }}
+                  onBlur={() => commitTextRef.current?.()}
+                  placeholder="Type text…"
+                  style={{
+                    position: "absolute",
+                    left: sx, top: sy,
+                    transform: textAlign === "center" ? "translateX(-50%)" : textAlign === "right" ? "translateX(-100%)" : undefined,
+                    minWidth: Math.max(80, displaySize * 4),
+                    minHeight: displaySize * textLineHeight,
+                    padding: 2,
+                    margin: 0,
+                    background: textBgOn ? textBgColor : "rgba(0,0,0,0.08)",
+                    color: textColor,
+                    opacity: textOpacity,
+                    fontFamily: `"${textFont}", sans-serif`,
+                    fontSize: displaySize,
+                    fontWeight: textBold ? 700 : 400,
+                    fontStyle: textItalic ? "italic" : "normal",
+                    textDecoration: textUnderline ? "underline" : "none",
+                    textAlign,
+                    letterSpacing: textLetterSpacing * v.scale,
+                    lineHeight: textLineHeight,
+                    border: "1px dashed #6c63ff",
+                    outline: "none",
+                    resize: "none",
+                    overflow: "hidden",
+                    whiteSpace: "pre",
+                    caretColor: textColor,
+                    textShadow: textShadowOn ? `${textShadowX * v.scale}px ${textShadowY * v.scale}px ${textShadowBlur * v.scale}px ${textShadowColor}` : undefined,
+                    WebkitTextStroke: textOutlineOn ? `${textOutlineWidth * v.scale}px ${textOutlineColor}` : undefined,
+                    boxSizing: "content-box",
+                  }}
+                />
+              );
+            })()}
           </div>
 
           {/* Status bar */}
