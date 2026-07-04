@@ -205,6 +205,30 @@ export default function ToonvoEditor() {
   const [starPoints, setStarPoints] = useState(5);
   const [starInnerRatio, setStarInnerRatio] = useState(0.5);
 
+  // Text tool state
+  const [textFont, setTextFont] = useState("Arial");
+  const [textSize, setTextSize] = useState(48);
+  const [textBold, setTextBold] = useState(false);
+  const [textItalic, setTextItalic] = useState(false);
+  const [textUnderline, setTextUnderline] = useState(false);
+  const [textColor, setTextColor] = useState("#ffffff");
+  const [textOpacity, setTextOpacity] = useState(1);
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
+  const [textLetterSpacing, setTextLetterSpacing] = useState(0);
+  const [textLineHeight, setTextLineHeight] = useState(1.2);
+  const [textOutlineOn, setTextOutlineOn] = useState(false);
+  const [textOutlineColor, setTextOutlineColor] = useState("#000000");
+  const [textOutlineWidth, setTextOutlineWidth] = useState(2);
+  const [textShadowOn, setTextShadowOn] = useState(false);
+  const [textShadowX, setTextShadowX] = useState(3);
+  const [textShadowY, setTextShadowY] = useState(3);
+  const [textShadowBlur, setTextShadowBlur] = useState(6);
+  const [textShadowColor, setTextShadowColor] = useState("#000000");
+  const [textBgOn, setTextBgOn] = useState(false);
+  const [textBgColor, setTextBgColor] = useState("#000000");
+  const [textBgPadding, setTextBgPadding] = useState(6);
+  const [textEditing, setTextEditing] = useState<{ canvasX: number; canvasY: number; value: string } | null>(null);
+
   const [onion, setOnion] = useState(false);
   const [onionBefore, setOnionBefore] = useState(1);
   const [onionAfter, setOnionAfter] = useState(1);
