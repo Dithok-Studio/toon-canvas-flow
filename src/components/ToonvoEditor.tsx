@@ -285,6 +285,8 @@ export default function ToonvoEditor() {
     curX?: number; curY?: number; shift?: boolean; alt?: boolean;
   }>({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, pts: [] });
   const airbrushTimerRef = useRef<number | null>(null);
+  const pushHistoryRef = useRef<((label: string) => void) | null>(null);
+  const buildThumbRef = useRef<((i: number) => void) | null>(null);
 
   const selectionRef = useRef<Selection | null>(null);
   const floatingRef = useRef<Floating | null>(null);
@@ -846,8 +848,6 @@ export default function ToonvoEditor() {
   const commitTextRef = useRef(commitText);
   useEffect(() => { commitTextRef.current = commitText; }, [commitText]);
 
-  const pushHistoryRef = useRef<((label: string) => void) | null>(null);
-  const buildThumbRef = useRef<((i: number) => void) | null>(null);
 
   // ------------- Selection helpers -------------
   const pointInPolygon = (x: number, y: number, pts: { x: number; y: number }[]) => {
