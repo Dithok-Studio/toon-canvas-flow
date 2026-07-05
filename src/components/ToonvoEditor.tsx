@@ -588,41 +588,38 @@ export default function ToonvoEditor() {
   buildThumbRef.current = buildThumb;
 
   const undo = () => {
-    setHistory((h) => {
-      if (h.length === 0) return h;
-      const last = h[h.length - 1];
-      const f = framesRef.current[last.frame];
-      const l = f?.layers[last.layer];
-      if (l) {
-        const ctx = l.canvas.getContext("2d")!;
-        const cur = ctx.getImageData(0, 0, l.canvas.width, l.canvas.height);
-        setRedoStack((r) => [...r, { ...last, image: cur }]);
-        ctx.putImageData(last.image, 0, 0);
-        render();
-        buildThumb(last.frame);
-      }
-      setHistoryLabels((ls) => ls.slice(0, -1));
-      return h.slice(0, -1);
-    });
+    const h = history;
+    if (h.length === 0) return;
+    const last = h[h.length - 1];
+    const f = framesRef.current[last.frame];
+    const l = f?.layers[last.layer];
+    if (!l) return;
+    const ctx = l.canvas.getContext("2d")!;
+    const cur = ctx.getImageData(0, 0, l.canvas.width, l.canvas.height);
+    ctx.putImageData(last.image, 0, 0);
+    render();
+    buildThumb(last.frame);
+    setHistory(h.slice(0, -1));
+    setHistoryLabels((ls) => ls.slice(0, -1));
+    setRedoStack((r) => [...r, { ...last, image: cur }]);
   };
   const redo = () => {
-    setRedoStack((r) => {
-      if (r.length === 0) return r;
-      const last = r[r.length - 1];
-      const f = framesRef.current[last.frame];
-      const l = f?.layers[last.layer];
-      if (l) {
-        const ctx = l.canvas.getContext("2d")!;
-        const cur = ctx.getImageData(0, 0, l.canvas.width, l.canvas.height);
-        setHistory((h) => [...h, { ...last, image: cur }]);
-        ctx.putImageData(last.image, 0, 0);
-        render();
-        buildThumb(last.frame);
-      }
-      setHistoryLabels((ls) => [...ls, last.label]);
-      return r.slice(0, -1);
-    });
+    const r = redoStack;
+    if (r.length === 0) return;
+    const last = r[r.length - 1];
+    const f = framesRef.current[last.frame];
+    const l = f?.layers[last.layer];
+    if (!l) return;
+    const ctx = l.canvas.getContext("2d")!;
+    const cur = ctx.getImageData(0, 0, l.canvas.width, l.canvas.height);
+    ctx.putImageData(last.image, 0, 0);
+    render();
+    buildThumb(last.frame);
+    setRedoStack(r.slice(0, -1));
+    setHistory((h) => [...h, { ...last, image: cur }]);
+    setHistoryLabels((ls) => [...ls, last.label]);
   };
+
 
   // ------------- Coord transform (CSS px -> canvas px) -------------
   const eventToCanvas = (e: { clientX: number; clientY: number }) => {
