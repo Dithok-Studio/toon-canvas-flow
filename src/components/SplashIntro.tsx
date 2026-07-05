@@ -2,60 +2,109 @@ import { useEffect, useMemo, useState } from "react";
 
 /**
  * TOONVO animated splash intro.
- * ~2.5s sequence, then fades out and unmounts.
- * Callers control mounting via sessionStorage gating.
+ * JS-driven timings via setTimeout (not CSS animation-duration).
+ * Total ~5s, then fades out and unmounts.
  */
+
+const INTRO_DURATION = 5000; // 5 seconds total
+const PARTICLE_START = 300;  // 0.3s
+const LOGO_START = 800;      // 0.8s
+const TAGLINE_START = 1500;  // 1.5s
+const BAR_START = 2200;      // 2.2s
+const HOLD_TIME = 3500;      // 3.5s
+const FADE_START = 4000;     // 4.0s
+const APP_SHOW = 5000;       // 5.0s
+const SKIP_SHOW = 600;       // 0.6s
+
 export default function SplashIntro({ onDone }: { onDone: () => void }) {
-  const [exiting, setExiting] = useState(false);
+  const [showParticles, setShowParticles] = useState(false);
+  const [showLogo, setShowLogo] = useState(false);
+  const [showTagline, setShowTagline] = useState(false);
+  const [showBar, setShowBar] = useState(false);
+  const [showSkip, setShowSkip] = useState(false);
+  const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    const t1 = window.setTimeout(() => setExiting(true), 2500);
-    const t2 = window.setTimeout(() => onDone(), 2850);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    console.log("Intro started", Date.now());
+    const timers: number[] = [];
+    timers.push(window.setTimeout(() => setShowParticles(true), PARTICLE_START));
+    timers.push(window.setTimeout(() => setShowSkip(true), SKIP_SHOW));
+    timers.push(window.setTimeout(() => {
+      setShowLogo(true);
+      console.log("Logo shown at", Date.now());
+    }, LOGO_START));
+    timers.push(window.setTimeout(() => {
+      setShowTagline(true);
+      console.log("Tagline shown at", Date.now());
+    }, TAGLINE_START));
+    timers.push(window.setTimeout(() => setShowBar(true), BAR_START));
+    timers.push(window.setTimeout(() => {
+      // brief hold before fade
+    }, HOLD_TIME));
+    timers.push(window.setTimeout(() => setFading(true), FADE_START));
+    timers.push(window.setTimeout(() => {
+      console.log("Intro done at", Date.now());
+      onDone();
+    }, APP_SHOW));
+
+    // Suppress unused-const warnings for reference values.
+    void INTRO_DURATION;
+    void HOLD_TIME;
+
+    return () => { timers.forEach((t) => clearTimeout(t)); };
   }, [onDone]);
 
   const particles = useMemo(
     () => Array.from({ length: 20 }).map((_, i) => ({
       left: Math.round((i * 53 + 17) % 100),
-      delay: 0.3 + (i % 10) * 0.08,
+      delay: (i % 10) * 0.08,
       dur: 2.2 + ((i * 7) % 10) * 0.15,
       size: 2 + (i % 4),
     })),
     []
   );
 
-  const skip = () => { setExiting(true); window.setTimeout(onDone, 300); };
+  const skip = () => {
+    console.log("Intro skipped at", Date.now());
+    onDone();
+  };
 
   return (
-    <div className={"tv-splash" + (exiting ? " tv-splash-out" : "")} role="dialog" aria-label="TOONVO loading">
-      <button className="tv-splash-skip" onClick={skip} aria-label="Skip intro">Skip →</button>
+    <div className={"tv-splash" + (fading ? " tv-splash-out" : "")} role="dialog" aria-label="TOONVO loading">
+      {showSkip && (
+        <button className="tv-splash-skip" onClick={skip} aria-label="Skip intro">Skip →</button>
+      )}
 
-      <div className="tv-splash-particles" aria-hidden>
-        {particles.map((p, i) => (
-          <span
-            key={i}
-            className="tv-splash-particle"
-            style={{
-              left: `${p.left}%`,
-              width: p.size,
-              height: p.size,
-              animationDelay: `${p.delay}s`,
-              animationDuration: `${p.dur}s`,
-            }}
-          />
-        ))}
-      </div>
+      {showParticles && (
+        <div className="tv-splash-particles" aria-hidden>
+          {particles.map((p, i) => (
+            <span
+              key={i}
+              className="tv-splash-particle"
+              style={{
+                left: `${p.left}%`,
+                width: p.size,
+                height: p.size,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.dur}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="tv-splash-center">
-        <div className="tv-splash-logo">
+        <div className={"tv-splash-logo" + (showLogo ? " is-in" : "")}>
           <span className="tv-splash-icon" aria-hidden>▦</span>
           <span className="tv-splash-word">TOONVO</span>
         </div>
-        <div className="tv-splash-tag">Draw&nbsp;&nbsp;·&nbsp;&nbsp;Animate&nbsp;&nbsp;·&nbsp;&nbsp;Create</div>
+        <div className={"tv-splash-tag" + (showTagline ? " is-in" : "")}>
+          Draw&nbsp;&nbsp;·&nbsp;&nbsp;Animate&nbsp;&nbsp;·&nbsp;&nbsp;Create
+        </div>
       </div>
 
       <div className="tv-splash-progress" aria-hidden>
-        <div className="tv-splash-progress-fill" />
+        <div className="tv-splash-progress-fill" style={{ width: showBar ? "100%" : "0%" }} />
       </div>
 
       <style>{`
@@ -64,11 +113,10 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
           background: #0d0d1a;
           display: flex; align-items: center; justify-content: center;
           overflow: hidden;
-          animation: tv-splash-in 0.2s ease-out both;
+          opacity: 1;
+          transition: opacity 0.5s ease;
         }
-        .tv-splash-out { animation: tv-splash-out 0.3s ease-in forwards; }
-        @keyframes tv-splash-in { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes tv-splash-out { from { opacity: 1 } to { opacity: 0 } }
+        .tv-splash-out { opacity: 0; }
 
         .tv-splash-skip {
           position: fixed; top: 24px; right: 24px;
@@ -78,13 +126,10 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
           font: 500 13px/1 system-ui, -apple-system, sans-serif;
           cursor: pointer; padding: 8px 16px;
           border-radius: 20px;
-          z-index: 9999;
-          opacity: 0; animation: tv-splash-skip-in 0.4s ease-out 0.5s forwards;
+          z-index: 10000;
           transition: background 0.15s, color 0.15s;
         }
         .tv-splash-skip:hover { background: #6c63ff; color: #fff; }
-        @keyframes tv-splash-skip-in { to { opacity: 1 } }
-
 
         .tv-splash-particles { position: absolute; inset: 0; pointer-events: none; }
         .tv-splash-particle {
@@ -94,7 +139,7 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
           box-shadow: 0 0 8px rgba(108,99,255,0.45);
           animation-name: tv-splash-float;
           animation-timing-function: ease-out;
-          animation-iteration-count: 1;
+          animation-iteration-count: infinite;
           animation-fill-mode: both;
           opacity: 0;
         }
@@ -110,12 +155,10 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
         .tv-splash-logo {
           display: flex; align-items: center; gap: 18px;
           opacity: 0; transform: scale(0.85);
-          animation: tv-splash-logo-in 0.6s cubic-bezier(.2,.7,.2,1) 0.7s forwards;
+          transition: opacity 0.6s ease, transform 0.6s ease;
           filter: drop-shadow(0 0 30px rgba(108,99,255,0.5));
         }
-        @keyframes tv-splash-logo-in {
-          to { opacity: 1; transform: scale(1); }
-        }
+        .tv-splash-logo.is-in { opacity: 1; transform: scale(1); }
         .tv-splash-icon {
           display: inline-block;
           font-size: 48px; line-height: 1;
@@ -138,25 +181,19 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
           font: 500 13px/1 system-ui, -apple-system, sans-serif;
           letter-spacing: 0.28em; text-transform: uppercase;
           opacity: 0; transform: translateY(10px);
-          animation: tv-splash-tag-in 0.5s ease-out 1.5s forwards;
+          transition: opacity 0.5s ease, transform 0.5s ease;
         }
-        @keyframes tv-splash-tag-in {
-          to { opacity: 1; transform: translateY(0); }
-        }
+        .tv-splash-tag.is-in { opacity: 1; transform: translateY(0); }
 
         .tv-splash-progress {
           position: absolute; left: 0; right: 0; bottom: 0;
           height: 2px; background: rgba(255,255,255,0.05);
-          opacity: 0; animation: tv-splash-tag-in 0.3s ease-out 1.9s forwards;
         }
         .tv-splash-progress-fill {
           width: 0%; height: 100%;
           background: linear-gradient(90deg, #6c63ff, #a855f7);
-          animation: tv-splash-progress-fill 0.55s ease-out 2s forwards;
+          transition: width 0.8s ease-in-out;
           box-shadow: 0 0 8px rgba(108,99,255,0.6);
-        }
-        @keyframes tv-splash-progress-fill {
-          to { width: 100%; }
         }
       `}</style>
     </div>
