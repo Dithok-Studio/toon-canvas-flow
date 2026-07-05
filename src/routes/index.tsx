@@ -27,18 +27,12 @@ function Index() {
   // and file-input buttons that don't hydrate cleanly. Rendering it only
   // after mount avoids SSR/CSR mismatches without changing editor internals.
   const [mounted, setMounted] = useState(false);
-  const [showSplash, setShowSplash] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     setMounted(true);
-    try {
-      const seen = window.sessionStorage.getItem(SPLASH_KEY);
-      if (!seen) {
-        setShowSplash(true);
-        window.sessionStorage.setItem(SPLASH_KEY, "1");
-      }
-    } catch { /* private-mode fallthrough */ }
   }, []);
+
 
   if (!mounted) {
     // Same background as splash so the SSR shell blends into the intro.
