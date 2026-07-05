@@ -71,15 +71,20 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
         @keyframes tv-splash-out { from { opacity: 1 } to { opacity: 0 } }
 
         .tv-splash-skip {
-          position: absolute; top: 18px; right: 22px;
-          background: transparent; border: 0; color: rgba(255,255,255,0.4);
+          position: fixed; top: 24px; right: 24px;
+          background: rgba(26,26,46,0.8);
+          border: 1px solid #6c63ff;
+          color: rgba(255,255,255,0.9);
           font: 500 13px/1 system-ui, -apple-system, sans-serif;
-          cursor: pointer; padding: 8px 12px;
+          cursor: pointer; padding: 8px 16px;
+          border-radius: 20px;
+          z-index: 9999;
           opacity: 0; animation: tv-splash-skip-in 0.4s ease-out 0.5s forwards;
-          transition: color 0.15s;
+          transition: background 0.15s, color 0.15s;
         }
-        .tv-splash-skip:hover { color: rgba(255,255,255,0.85); }
+        .tv-splash-skip:hover { background: #6c63ff; color: #fff; }
         @keyframes tv-splash-skip-in { to { opacity: 1 } }
+
 
         .tv-splash-particles { position: absolute; inset: 0; pointer-events: none; }
         .tv-splash-particle {
@@ -105,26 +110,29 @@ export default function SplashIntro({ onDone }: { onDone: () => void }) {
         .tv-splash-logo {
           display: flex; align-items: center; gap: 18px;
           opacity: 0; transform: scale(0.85);
-          animation: tv-splash-logo-in 0.6s cubic-bezier(.2,.7,.2,1) 0.8s forwards;
-          filter: drop-shadow(0 0 24px rgba(108,99,255,0.45));
+          animation: tv-splash-logo-in 0.6s cubic-bezier(.2,.7,.2,1) 0.7s forwards;
+          filter: drop-shadow(0 0 30px rgba(108,99,255,0.5));
         }
         @keyframes tv-splash-logo-in {
           to { opacity: 1; transform: scale(1); }
         }
         .tv-splash-icon {
           display: inline-block;
-          font-size: 44px; line-height: 1;
+          font-size: 48px; line-height: 1;
           background: linear-gradient(135deg, #6c63ff, #a855f7);
           -webkit-background-clip: text; background-clip: text;
           -webkit-text-fill-color: transparent; color: transparent;
         }
+        @media (min-width: 768px) { .tv-splash-icon { font-size: 60px; } }
         .tv-splash-word {
-          font: 800 clamp(48px, 9vw, 96px)/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+          font: 900 48px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
           letter-spacing: 0.02em;
           background: linear-gradient(135deg, #6c63ff, #a855f7);
           -webkit-background-clip: text; background-clip: text;
           -webkit-text-fill-color: transparent; color: transparent;
         }
+        @media (min-width: 768px) { .tv-splash-word { font-size: 72px; } }
+
         .tv-splash-tag {
           color: rgba(255,255,255,0.6);
           font: 500 13px/1 system-ui, -apple-system, sans-serif;
