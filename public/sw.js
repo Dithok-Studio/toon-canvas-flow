@@ -1,9 +1,13 @@
-// TOONVO service worker - app shell cache + network-first navigation
-const VERSION = "toonvo-v1";
+// TOONVO service worker — network-first with cache fallback (offline).
+// Version bump forces old caches to be wiped on activate so previously
+// cached JS bundles cannot mask fresh app updates.
+const VERSION = "toonvo-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(APP_SHELL)).catch(() => {}));
+  event.waitUntil(
+    caches.open(VERSION).then((c) => c.addAll(APP_SHELL)).catch(() => {})
+  );
   self.skipWaiting();
 });
 
@@ -16,36 +20,26 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first for everything same-origin. If the network fails
+// (offline), fall back to whatever is in the cache. This guarantees
+// fresh JS/CSS/HTML while still working offline once things are cached.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok && res.type === "basic") {
           const copy = res.clone();
           caches.open(VERSION).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match(req).then((r) => r || caches.match("/")))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(req).then(
-      (cached) =>
-        cached ||
-        fetch(req).then((res) => {
-          if (res.ok && res.type === "basic") {
-            const copy = res.clone();
-            caches.open(VERSION).then((c) => c.put(req, copy)).catch(() => {});
-          }
-          return res;
-        }).catch(() => cached)
-    )
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req).then((cached) => cached || caches.match("/"))
+      )
   );
 });

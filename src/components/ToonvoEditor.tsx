@@ -319,7 +319,22 @@ export default function ToonvoEditor() {
     const bip = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
     window.addEventListener("beforeinstallprompt", bip);
     if ("serviceWorker" in navigator && location.protocol !== "blob:") {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then((reg) => {
+        // Force an update check on every load so a bumped VERSION in
+        // sw.js takes effect immediately instead of on the next visit.
+        reg.update().catch(() => {});
+        reg.addEventListener("updatefound", () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener("statechange", () => {
+            if (nw.state === "activated") {
+              // New SW took over — reload so the page runs the fresh
+              // bundle instead of the previously cached one.
+              if (navigator.serviceWorker.controller) location.reload();
+            }
+          });
+        });
+      }).catch(() => {});
     }
     return () => {
       window.removeEventListener("online", on);
@@ -1180,7 +1195,7 @@ export default function ToonvoEditor() {
 
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer not active — non-fatal */ }
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
@@ -2192,7 +2207,7 @@ function ReferencePanel({ data, onChange, onClose }: { data: RefImage; onChange:
   const dragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; x: number; y: number; w: number; h: number } | null>(null);
   const onPointerDown = (mode: "move" | "resize") => (e: React.PointerEvent) => {
     e.preventDefault();
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try { (e.target as Element).setPointerCapture(e.pointerId); } catch { /* non-fatal */ }
     dragRef.current = { mode, sx: e.clientX, sy: e.clientY, x: data.x, y: data.y, w: data.w, h: data.h };
   };
   const onPointerMove = (e: React.PointerEvent) => {
