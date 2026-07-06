@@ -1195,7 +1195,7 @@ export default function ToonvoEditor() {
 
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer not active — non-fatal */ }
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
