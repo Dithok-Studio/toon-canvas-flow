@@ -2207,7 +2207,7 @@ function ReferencePanel({ data, onChange, onClose }: { data: RefImage; onChange:
   const dragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; x: number; y: number; w: number; h: number } | null>(null);
   const onPointerDown = (mode: "move" | "resize") => (e: React.PointerEvent) => {
     e.preventDefault();
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try { (e.target as Element).setPointerCapture(e.pointerId); } catch { /* non-fatal */ }
     dragRef.current = { mode, sx: e.clientX, sy: e.clientY, x: data.x, y: data.y, w: data.w, h: data.h };
   };
   const onPointerMove = (e: React.PointerEvent) => {
