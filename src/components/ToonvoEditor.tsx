@@ -237,6 +237,38 @@ export default function ToonvoEditor() {
   const [showGrid, setShowGrid] = useState(false);
   const [symmetry, setSymmetry] = useState<"none" | "h" | "v" | "both">("none");
 
+  // ------------- Ruler / guide (FlipaClip-style) -------------
+  const [ruler, setRuler] = useState<RulerState>({
+    type: "none", cx: 960, cy: 540, w: 800, h: 500, angle: 0, locked: false, mirror: "none",
+  });
+  const rulerActionRef = useRef<{ mode: string | null; startX: number; startY: number; orig: RulerState }>({
+    mode: null, startX: 0, startY: 0,
+    orig: { type: "none", cx: 0, cy: 0, w: 0, h: 0, angle: 0, locked: false, mirror: "none" },
+  });
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gestureRef = useRef<{ active: boolean; dist: number; angle: number; orig: RulerState }>({
+    active: false, dist: 1, angle: 0,
+    orig: { type: "none", cx: 0, cy: 0, w: 0, h: 0, angle: 0, locked: false, mirror: "none" },
+  });
+  const toggleRulerRef = useRef<(() => void) | null>(null);
+  const setRulerType = (t: RulerType) => {
+    setRuler((r) => ({
+      ...r,
+      type: t,
+      cx: dims.w / 2,
+      cy: dims.h / 2,
+      w: t === "perspective" ? Math.max(dims.w, dims.h) : dims.w * 0.6,
+      h: dims.h * 0.5,
+      angle: 0,
+    }));
+  };
+  const toggleRuler = () => {
+    if (ruler.type === "none") setRulerType("line");
+    else setRuler((r) => ({ ...r, type: "none" }));
+  };
+  toggleRulerRef.current = toggleRuler;
+
+
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [fitOnce, setFitOnce] = useState(0);
