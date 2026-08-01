@@ -1199,6 +1199,24 @@ export default function ToonvoEditor() {
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
+    // Track active pointers (for two-finger ruler gestures)
+    {
+      const p0 = eventToCanvas(e);
+      pointersRef.current.set(e.pointerId, { x: p0.x, y: p0.y });
+      if (pointersRef.current.size === 2 && ruler.type !== "none" && !ruler.locked) {
+        const [a, b] = Array.from(pointersRef.current.values());
+        gestureRef.current = {
+          active: true,
+          dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+          angle: Math.atan2(b.y - a.y, b.x - a.x),
+          orig: { ...ruler },
+        };
+        drawingRef.current.active = false;
+        rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
+        return;
+      }
+    }
+
     // Pan: space-hold, middle-mouse, or move tool
     const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
     if (isPan) {
@@ -1208,10 +1226,28 @@ export default function ToonvoEditor() {
     }
 
     const { x, y } = eventToCanvas(e);
+
+    // ---- Ruler manipulation (handles / move) ----
+    if (ruler.type !== "none" && !ruler.locked) {
+      const tol = 14 / (viewRef.current.scale || 1);
+      const hit = rulerHandles(ruler).find(h => Math.hypot(x - h.x, y - h.y) <= tol);
+      if (hit) {
+        rulerActionRef.current = { mode: hit.id, startX: x, startY: y, orig: { ...ruler } };
+        drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+        return;
+      }
+      if (Math.hypot(x - ruler.cx, y - ruler.cy) <= tol * 1.4) {
+        rulerActionRef.current = { mode: "move", startX: x, startY: y, orig: { ...ruler } };
+        drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+        return;
+      }
+    }
+
     const frame = frames[currentFrame];
     if (!frame) return;
     const layer = frame.layers[frame.activeLayer];
     if (!layer) return;
+
 
     // ---- Selection / Lasso ----
     if (tool === "select" || tool === "lasso") {
