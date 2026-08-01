@@ -517,10 +517,66 @@ export default function ToonvoEditor() {
       ctx.restore();
     }
 
+    // Ruler / guide overlay (never exported — display canvas only)
+    if (ruler.type !== "none") {
+      const inv = 1 / scale;
+      ctx.save();
+      ctx.strokeStyle = ruler.locked ? "#ffb347" : "#6c63ff";
+      ctx.lineWidth = Math.max(1, 2 * inv);
+      ctx.setLineDash([]);
+      if (ruler.type === "line") {
+        const a = rulerToWorld(ruler, -ruler.w / 2, 0);
+        const b = rulerToWorld(ruler, ruler.w / 2, 0);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      } else if (ruler.type === "perspective") {
+        ctx.setLineDash([10 * inv, 8 * inv]);
+        const rays = 16;
+        for (let i = 0; i < rays; i++) {
+          const t = (i / rays) * Math.PI * 2 + ruler.angle;
+          ctx.beginPath();
+          ctx.moveTo(ruler.cx, ruler.cy);
+          ctx.lineTo(ruler.cx + Math.cos(t) * ruler.w, ruler.cy + Math.sin(t) * ruler.w);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      } else {
+        ctx.save();
+        ctx.translate(ruler.cx, ruler.cy);
+        ctx.rotate(ruler.angle);
+        ctx.beginPath();
+        if (ruler.type === "ellipse") ctx.ellipse(0, 0, Math.max(1, ruler.w / 2), Math.max(1, ruler.h / 2), 0, 0, Math.PI * 2);
+        else ctx.rect(-ruler.w / 2, -ruler.h / 2, ruler.w, ruler.h);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Mirror axes
+      if (ruler.mirror !== "none") {
+        ctx.save();
+        ctx.setLineDash([6 * inv, 6 * inv]);
+        ctx.strokeStyle = "rgba(108,99,255,0.55)";
+        ctx.translate(ruler.cx, ruler.cy);
+        ctx.rotate(ruler.angle);
+        const ex = Math.max(ruler.w, ruler.h);
+        if (ruler.mirror === "h" || ruler.mirror === "both") { ctx.beginPath(); ctx.moveTo(0, -ex); ctx.lineTo(0, ex); ctx.stroke(); }
+        if (ruler.mirror === "v" || ruler.mirror === "both") { ctx.beginPath(); ctx.moveTo(-ex, 0); ctx.lineTo(ex, 0); ctx.stroke(); }
+        ctx.restore();
+      }
+      // Handles
+      const hr = 7 * inv;
+      ctx.fillStyle = ruler.locked ? "#ffb347" : "#ffffff";
+      ctx.strokeStyle = "#6c63ff";
+      ctx.lineWidth = Math.max(1, 2 * inv);
+      [{ x: ruler.cx, y: ruler.cy }, ...rulerHandles(ruler)].forEach((h) => {
+        ctx.beginPath(); ctx.arc(h.x, h.y, hr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
+
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating]);
+  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating, ruler]);
+
 
   // Resize observer
   useEffect(() => {
