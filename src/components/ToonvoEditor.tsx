@@ -66,6 +66,88 @@ type Selection =
 
 type Floating = { canvas: HTMLCanvasElement; x: number; y: number };
 
+// ---- Ruler / guide ----
+type RulerType = "none" | "line" | "ellipse" | "rect" | "perspective";
+type MirrorMode = "none" | "h" | "v" | "both";
+interface RulerState {
+  type: RulerType;
+  cx: number; cy: number;
+  w: number; h: number;
+  angle: number;
+  locked: boolean;
+  mirror: MirrorMode;
+}
+
+const rulerToLocal = (r: RulerState, x: number, y: number) => {
+  const c = Math.cos(-r.angle), s = Math.sin(-r.angle);
+  const dx = x - r.cx, dy = y - r.cy;
+  return { x: dx * c - dy * s, y: dx * s + dy * c };
+};
+const rulerToWorld = (r: RulerState, x: number, y: number) => {
+  const c = Math.cos(r.angle), s = Math.sin(r.angle);
+  return { x: r.cx + x * c - y * s, y: r.cy + x * s + y * c };
+};
+const rulerHandles = (r: RulerState): { id: string; x: number; y: number }[] => {
+  if (r.type === "line") {
+    const a = rulerToWorld(r, -r.w / 2, 0);
+    const b = rulerToWorld(r, r.w / 2, 0);
+    const rot = rulerToWorld(r, 0, -60);
+    return [{ id: "start", ...a }, { id: "end", ...b }, { id: "rot", ...rot }];
+  }
+  if (r.type === "perspective") {
+    return [{ id: "rot", ...rulerToWorld(r, 0, -60) }];
+  }
+  const hx = r.w / 2, hy = r.h / 2;
+  return [
+    { id: "nw", ...rulerToWorld(r, -hx, -hy) },
+    { id: "ne", ...rulerToWorld(r, hx, -hy) },
+    { id: "se", ...rulerToWorld(r, hx, hy) },
+    { id: "sw", ...rulerToWorld(r, -hx, hy) },
+    { id: "rot", ...rulerToWorld(r, 0, -hy - 60) },
+  ];
+};
+// Snap a point onto the active guide. (sx, sy) = stroke start (used by perspective).
+const snapToRuler = (r: RulerState, x: number, y: number, sx: number, sy: number) => {
+  if (r.type === "perspective") {
+    let vx = sx - r.cx, vy = sy - r.cy;
+    if (Math.hypot(vx, vy) < 1) { vx = x - r.cx; vy = y - r.cy; }
+    const len = Math.hypot(vx, vy) || 1;
+    const ux = vx / len, uy = vy / len;
+    const t = (x - r.cx) * ux + (y - r.cy) * uy;
+    return { x: r.cx + ux * t, y: r.cy + uy * t };
+  }
+  const p = rulerToLocal(r, x, y);
+  if (r.type === "line") {
+    const hx = Math.max(1, r.w / 2);
+    return rulerToWorld(r, Math.max(-hx, Math.min(hx, p.x)), 0);
+  }
+  if (r.type === "ellipse") {
+    const rx = Math.max(1, r.w / 2), ry = Math.max(1, r.h / 2);
+    const t = Math.atan2(p.y / ry, p.x / rx);
+    return rulerToWorld(r, Math.cos(t) * rx, Math.sin(t) * ry);
+  }
+  const hx = r.w / 2, hy = r.h / 2;
+  const cands = [
+    { x: Math.max(-hx, Math.min(hx, p.x)), y: -hy },
+    { x: Math.max(-hx, Math.min(hx, p.x)), y: hy },
+    { x: -hx, y: Math.max(-hy, Math.min(hy, p.y)) },
+    { x: hx, y: Math.max(-hy, Math.min(hy, p.y)) },
+  ];
+  let best = cands[0], bd = Infinity;
+  for (const c of cands) {
+    const d = Math.hypot(c.x - p.x, c.y - p.y);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return rulerToWorld(r, best.x, best.y);
+};
+const mirrorAcrossRuler = (r: RulerState, x: number, y: number, mode: "h" | "v" | "both") => {
+  const p = rulerToLocal(r, x, y);
+  const mx = mode === "h" || mode === "both" ? -p.x : p.x;
+  const my = mode === "v" || mode === "both" ? -p.y : p.y;
+  return rulerToWorld(r, mx, my);
+};
+
+
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
   { title: "Stroke", tools: [
     { id: "pen", label: "Pen", key: "P", icon: "✒️" },
@@ -86,7 +168,7 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "bucket", label: "Bucket", key: "G", icon: "🪣" },
   ]},
   { title: "Shapes", tools: [
-    { id: "rect", label: "Rectangle", key: "R", icon: "▭" },
+    { id: "rect", label: "Rectangle", key: "K", icon: "▭" },
     { id: "ellipse", label: "Ellipse", key: "O", icon: "◯" },
     { id: "line", label: "Line", key: "L", icon: "／" },
     { id: "polygon", label: "Polygon", icon: "⬡" },
@@ -236,6 +318,38 @@ export default function ToonvoEditor() {
 
   const [showGrid, setShowGrid] = useState(false);
   const [symmetry, setSymmetry] = useState<"none" | "h" | "v" | "both">("none");
+
+  // ------------- Ruler / guide (FlipaClip-style) -------------
+  const [ruler, setRuler] = useState<RulerState>({
+    type: "none", cx: 960, cy: 540, w: 800, h: 500, angle: 0, locked: false, mirror: "none",
+  });
+  const rulerActionRef = useRef<{ mode: string | null; startX: number; startY: number; orig: RulerState }>({
+    mode: null, startX: 0, startY: 0,
+    orig: { type: "none", cx: 0, cy: 0, w: 0, h: 0, angle: 0, locked: false, mirror: "none" },
+  });
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gestureRef = useRef<{ active: boolean; dist: number; angle: number; orig: RulerState }>({
+    active: false, dist: 1, angle: 0,
+    orig: { type: "none", cx: 0, cy: 0, w: 0, h: 0, angle: 0, locked: false, mirror: "none" },
+  });
+  const toggleRulerRef = useRef<(() => void) | null>(null);
+  const setRulerType = (t: RulerType) => {
+    setRuler((r) => ({
+      ...r,
+      type: t,
+      cx: dims.w / 2,
+      cy: dims.h / 2,
+      w: t === "perspective" ? Math.max(dims.w, dims.h) : dims.w * 0.6,
+      h: dims.h * 0.5,
+      angle: 0,
+    }));
+  };
+  const toggleRuler = () => {
+    if (ruler.type === "none") setRulerType("line");
+    else setRuler((r) => ({ ...r, type: "none" }));
+  };
+  toggleRulerRef.current = toggleRuler;
+
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -517,10 +631,66 @@ export default function ToonvoEditor() {
       ctx.restore();
     }
 
+    // Ruler / guide overlay (never exported — display canvas only)
+    if (ruler.type !== "none") {
+      const inv = 1 / scale;
+      ctx.save();
+      ctx.strokeStyle = ruler.locked ? "#ffb347" : "#6c63ff";
+      ctx.lineWidth = Math.max(1, 2 * inv);
+      ctx.setLineDash([]);
+      if (ruler.type === "line") {
+        const a = rulerToWorld(ruler, -ruler.w / 2, 0);
+        const b = rulerToWorld(ruler, ruler.w / 2, 0);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      } else if (ruler.type === "perspective") {
+        ctx.setLineDash([10 * inv, 8 * inv]);
+        const rays = 16;
+        for (let i = 0; i < rays; i++) {
+          const t = (i / rays) * Math.PI * 2 + ruler.angle;
+          ctx.beginPath();
+          ctx.moveTo(ruler.cx, ruler.cy);
+          ctx.lineTo(ruler.cx + Math.cos(t) * ruler.w, ruler.cy + Math.sin(t) * ruler.w);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      } else {
+        ctx.save();
+        ctx.translate(ruler.cx, ruler.cy);
+        ctx.rotate(ruler.angle);
+        ctx.beginPath();
+        if (ruler.type === "ellipse") ctx.ellipse(0, 0, Math.max(1, ruler.w / 2), Math.max(1, ruler.h / 2), 0, 0, Math.PI * 2);
+        else ctx.rect(-ruler.w / 2, -ruler.h / 2, ruler.w, ruler.h);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Mirror axes
+      if (ruler.mirror !== "none") {
+        ctx.save();
+        ctx.setLineDash([6 * inv, 6 * inv]);
+        ctx.strokeStyle = "rgba(108,99,255,0.55)";
+        ctx.translate(ruler.cx, ruler.cy);
+        ctx.rotate(ruler.angle);
+        const ex = Math.max(ruler.w, ruler.h);
+        if (ruler.mirror === "h" || ruler.mirror === "both") { ctx.beginPath(); ctx.moveTo(0, -ex); ctx.lineTo(0, ex); ctx.stroke(); }
+        if (ruler.mirror === "v" || ruler.mirror === "both") { ctx.beginPath(); ctx.moveTo(-ex, 0); ctx.lineTo(ex, 0); ctx.stroke(); }
+        ctx.restore();
+      }
+      // Handles
+      const hr = 7 * inv;
+      ctx.fillStyle = ruler.locked ? "#ffb347" : "#ffffff";
+      ctx.strokeStyle = "#6c63ff";
+      ctx.lineWidth = Math.max(1, 2 * inv);
+      [{ x: ruler.cx, y: ruler.cy }, ...rulerHandles(ruler)].forEach((h) => {
+        ctx.beginPath(); ctx.arc(h.x, h.y, hr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
+
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating]);
+  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating, ruler]);
+
 
   // Resize observer
   useEffect(() => {
@@ -1094,12 +1264,26 @@ export default function ToonvoEditor() {
   ) => {
     const ctx = layer.canvas.getContext("2d")!;
     const cx = dims.w / 2, cy = dims.h / 2;
-    const variants: [number, number, number, number][] = [[x0, y0, x1, y1]];
+    let variants: [number, number, number, number][] = [[x0, y0, x1, y1]];
     if (symmetry === "h" || symmetry === "both") variants.push([2 * cx - x0, y0, 2 * cx - x1, y1]);
     if (symmetry === "v" || symmetry === "both") variants.push([x0, 2 * cy - y0, x1, 2 * cy - y1]);
     if (symmetry === "both") variants.push([2 * cx - x0, 2 * cy - y0, 2 * cx - x1, 2 * cy - y1]);
+    // Ruler mirror: reflect across the guide's local axes
+    if (ruler.type !== "none" && ruler.mirror !== "none") {
+      const modes: ("h" | "v" | "both")[] = ruler.mirror === "both" ? ["h", "v", "both"] : [ruler.mirror];
+      const extra: [number, number, number, number][] = [];
+      variants.forEach(([a, b, c, d]) => {
+        modes.forEach((m) => {
+          const p0 = mirrorAcrossRuler(ruler, a, b, m);
+          const p1 = mirrorAcrossRuler(ruler, c, d, m);
+          extra.push([p0.x, p0.y, p1.x, p1.y]);
+        });
+      });
+      variants = variants.concat(extra);
+    }
     variants.forEach(([a, b, c, d]) => drawStrokeSegment(ctx, t, a, b, c, d, p));
   };
+
 
   // Draw a shape (rect/ellipse/line/polygon/star) with modifiers.
   const drawShape = (
@@ -1199,6 +1383,24 @@ export default function ToonvoEditor() {
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
+    // Track active pointers (for two-finger ruler gestures)
+    {
+      const p0 = eventToCanvas(e);
+      pointersRef.current.set(e.pointerId, { x: p0.x, y: p0.y });
+      if (pointersRef.current.size === 2 && ruler.type !== "none" && !ruler.locked) {
+        const [a, b] = Array.from(pointersRef.current.values());
+        gestureRef.current = {
+          active: true,
+          dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+          angle: Math.atan2(b.y - a.y, b.x - a.x),
+          orig: { ...ruler },
+        };
+        drawingRef.current.active = false;
+        rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
+        return;
+      }
+    }
+
     // Pan: space-hold, middle-mouse, or move tool
     const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
     if (isPan) {
@@ -1207,11 +1409,30 @@ export default function ToonvoEditor() {
       return;
     }
 
-    const { x, y } = eventToCanvas(e);
+    // eslint-disable-next-line prefer-const
+    let { x, y } = eventToCanvas(e);
+
+    // ---- Ruler manipulation (handles / move) ----
+    if (ruler.type !== "none" && !ruler.locked) {
+      const tol = 14 / (viewRef.current.scale || 1);
+      const hit = rulerHandles(ruler).find(h => Math.hypot(x - h.x, y - h.y) <= tol);
+      if (hit) {
+        rulerActionRef.current = { mode: hit.id, startX: x, startY: y, orig: { ...ruler } };
+        drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+        return;
+      }
+      if (Math.hypot(x - ruler.cx, y - ruler.cy) <= tol * 1.4) {
+        rulerActionRef.current = { mode: "move", startX: x, startY: y, orig: { ...ruler } };
+        drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, pts: [] };
+        return;
+      }
+    }
+
     const frame = frames[currentFrame];
     if (!frame) return;
     const layer = frame.layers[frame.activeLayer];
     if (!layer) return;
+
 
     // ---- Selection / Lasso ----
     if (tool === "select" || tool === "lasso") {
@@ -1291,6 +1512,10 @@ export default function ToonvoEditor() {
     }
 
     pushHistory(TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool);
+    if (ruler.type !== "none" && ruler.type !== "perspective") {
+      const sp = snapToRuler(ruler, x, y, x, y);
+      x = sp.x; y = sp.y;
+    }
     drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
     const ctx = layer.canvas.getContext("2d")!;
     if (tool === "eraserHard" || tool === "eraserSoft") {
@@ -1324,6 +1549,28 @@ export default function ToonvoEditor() {
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
+    if (pointersRef.current.has(e.pointerId)) {
+      const pc = eventToCanvas(e);
+      pointersRef.current.set(e.pointerId, { x: pc.x, y: pc.y });
+    }
+
+    // Two-finger gesture: rotate + pinch-scale the ruler
+    const g = gestureRef.current;
+    if (g.active && pointersRef.current.size >= 2) {
+      const [a, b] = Array.from(pointersRef.current.values()).slice(0, 2);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const k = Math.max(0.2, Math.min(6, dist / g.dist));
+      setRuler({
+        ...g.orig,
+        angle: g.orig.angle + (ang - g.angle),
+        w: Math.max(20, g.orig.w * k),
+        h: Math.max(20, g.orig.h * k),
+      });
+      render();
+      return;
+    }
+
     const d = drawingRef.current;
     if (!d.active) return;
 
@@ -1333,6 +1580,34 @@ export default function ToonvoEditor() {
       drawingRef.current.lastY = e.clientY;
       return;
     }
+
+    // Ruler handle drag
+    if (rulerActionRef.current.mode) {
+      const { x: gx, y: gy } = eventToCanvas(e);
+      const a = rulerActionRef.current;
+      const o = a.orig;
+      if (a.mode === "move" || a.mode === "vp") {
+        setRuler({ ...o, cx: o.cx + (gx - a.startX), cy: o.cy + (gy - a.startY) });
+      } else if (a.mode === "rot") {
+        setRuler({ ...o, angle: Math.atan2(gy - o.cy, gx - o.cx) + Math.PI / 2 });
+      } else if (a.mode === "start" || a.mode === "end") {
+        const fixedLocalX = a.mode === "start" ? o.w / 2 : -o.w / 2;
+        const fixed = rulerToWorld(o, fixedLocalX, 0);
+        const ncx = (fixed.x + gx) / 2, ncy = (fixed.y + gy) / 2;
+        const len = Math.hypot(gx - fixed.x, gy - fixed.y);
+        const ang = a.mode === "end"
+          ? Math.atan2(gy - fixed.y, gx - fixed.x)
+          : Math.atan2(fixed.y - gy, fixed.x - gx);
+        setRuler({ ...o, cx: ncx, cy: ncy, w: Math.max(10, len), angle: ang });
+      } else {
+        const p = rulerToLocal(o, gx, gy);
+        setRuler({ ...o, w: Math.max(20, Math.abs(p.x) * 2), h: Math.max(20, Math.abs(p.y) * 2) });
+      }
+      render();
+      return;
+    }
+
+
 
     // Selection drag update
     if (selActionRef.current.mode) {
@@ -1366,7 +1641,13 @@ export default function ToonvoEditor() {
     const layer = frame.layers[frame.activeLayer];
     if (!layer || layer.locked) return;
 
-    const { x, y } = eventToCanvas(e);
+    const raw = eventToCanvas(e);
+    let x = raw.x, y = raw.y;
+    const guided = ruler.type !== "none" && !isShapeTool(tool);
+    if (guided) {
+      const sp = snapToRuler(ruler, x, y, d.startX, d.startY);
+      x = sp.x; y = sp.y;
+    }
     const ctx = layer.canvas.getContext("2d")!;
     drawingRef.current.curX = x; drawingRef.current.curY = y;
 
@@ -1378,7 +1659,7 @@ export default function ToonvoEditor() {
     }
 
     let nx = x, ny = y;
-    if (smoothing > 0) {
+    if (smoothing > 0 && !guided) {
       const s = smoothing / 10;
       nx = d.lastX + (x - d.lastX) * (1 - s * 0.7);
       ny = d.lastY + (y - d.lastY) * (1 - s * 0.7);
@@ -1402,6 +1683,17 @@ export default function ToonvoEditor() {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    if (gestureRef.current.active && pointersRef.current.size < 2) {
+      gestureRef.current = { active: false, dist: 1, angle: 0, orig: ruler };
+    }
+    if (rulerActionRef.current.mode) {
+      rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
+      drawingRef.current.active = false;
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      render();
+      return;
+    }
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
     panModeRef.current = false;
@@ -1621,9 +1913,10 @@ export default function ToonvoEditor() {
       if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
       if (e.key === "Enter") { commitFloatRef.current(); return; }
       const k = e.key.toLowerCase();
+      if (k === "r") { toggleRulerRef.current?.(); return; }
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
+        e: "eraserHard", g: "bucket", k: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
@@ -1874,8 +2167,33 @@ export default function ToonvoEditor() {
               <button className={"toolbtn " + (onion ? "active" : "")} onClick={() => setOnion(o => !o)}><span className="ticon">👻</span><span className="tlabel">Onion</span></button>
               <button className={"toolbtn " + (showGrid ? "active" : "")} onClick={() => setShowGrid(g => !g)}><span className="ticon">▦</span><span className="tlabel">Grid</span></button>
               <button className={"toolbtn " + (symmetry !== "none" ? "active" : "")} onClick={() => setSymmetry(s => s === "none" ? "h" : s === "h" ? "v" : s === "v" ? "both" : "none")}><span className="ticon">⇋</span><span className="tlabel">Sym:{symmetry}</span></button>
+              <button className={"toolbtn " + (ruler.type !== "none" ? "active" : "")} title="Ruler / Guide (R)" onClick={() => toggleRuler()}><span className="ticon">📐</span><span className="tlabel">Ruler</span></button>
             </div>
           </div>
+          {ruler.type !== "none" && (
+            <div className="onionopts">
+              <label>Guide
+                <select value={ruler.type} onChange={e => setRulerType(e.target.value as RulerType)}>
+                  <option value="line">Straight Line</option>
+                  <option value="ellipse">Circle / Oval</option>
+                  <option value="rect">Rectangle</option>
+                  <option value="perspective">Perspective</option>
+                </select>
+              </label>
+              <button
+                className={ruler.mirror !== "none" ? "active" : ""}
+                title="Mirror / symmetry across the guide"
+                onClick={() => setRuler(r => ({ ...r, mirror: r.mirror === "none" ? "h" : r.mirror === "h" ? "v" : r.mirror === "v" ? "both" : "none" }))}
+              >Mirror: {ruler.mirror}</button>
+              <button
+                className={ruler.locked ? "active" : ""}
+                title="Lock guide position"
+                onClick={() => setRuler(r => ({ ...r, locked: !r.locked }))}
+              >{ruler.locked ? "🔒 Locked" : "🔓 Unlocked"}</button>
+              <button onClick={() => setRulerType(ruler.type)}>Reset Position</button>
+              <button onClick={() => setRuler(r => ({ ...r, type: "none" }))}>Turn Off</button>
+            </div>
+          )}
           {onion && (
             <div className="onionopts">
               <label>Before {onionBefore}<input type="range" min={0} max={3} value={onionBefore} onChange={e => setOnionBefore(+e.target.value)} /></label>
