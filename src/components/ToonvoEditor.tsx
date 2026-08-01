@@ -1094,12 +1094,26 @@ export default function ToonvoEditor() {
   ) => {
     const ctx = layer.canvas.getContext("2d")!;
     const cx = dims.w / 2, cy = dims.h / 2;
-    const variants: [number, number, number, number][] = [[x0, y0, x1, y1]];
+    let variants: [number, number, number, number][] = [[x0, y0, x1, y1]];
     if (symmetry === "h" || symmetry === "both") variants.push([2 * cx - x0, y0, 2 * cx - x1, y1]);
     if (symmetry === "v" || symmetry === "both") variants.push([x0, 2 * cy - y0, x1, 2 * cy - y1]);
     if (symmetry === "both") variants.push([2 * cx - x0, 2 * cy - y0, 2 * cx - x1, 2 * cy - y1]);
+    // Ruler mirror: reflect across the guide's local axes
+    if (ruler.type !== "none" && ruler.mirror !== "none") {
+      const modes: ("h" | "v" | "both")[] = ruler.mirror === "both" ? ["h", "v", "both"] : [ruler.mirror];
+      const extra: [number, number, number, number][] = [];
+      variants.forEach(([a, b, c, d]) => {
+        modes.forEach((m) => {
+          const p0 = mirrorAcrossRuler(ruler, a, b, m);
+          const p1 = mirrorAcrossRuler(ruler, c, d, m);
+          extra.push([p0.x, p0.y, p1.x, p1.y]);
+        });
+      });
+      variants = variants.concat(extra);
+    }
     variants.forEach(([a, b, c, d]) => drawStrokeSegment(ctx, t, a, b, c, d, p));
   };
+
 
   // Draw a shape (rect/ellipse/line/polygon/star) with modifiers.
   const drawShape = (
