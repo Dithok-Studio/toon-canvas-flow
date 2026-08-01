@@ -1409,7 +1409,8 @@ export default function ToonvoEditor() {
       return;
     }
 
-    const { x, y } = eventToCanvas(e);
+    // eslint-disable-next-line prefer-const
+    let { x, y } = eventToCanvas(e);
 
     // ---- Ruler manipulation (handles / move) ----
     if (ruler.type !== "none" && !ruler.locked) {
