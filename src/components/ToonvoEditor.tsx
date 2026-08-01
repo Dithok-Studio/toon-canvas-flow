@@ -1511,6 +1511,10 @@ export default function ToonvoEditor() {
     }
 
     pushHistory(TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool);
+    if (ruler.type !== "none" && ruler.type !== "perspective") {
+      const sp = snapToRuler(ruler, x, y, x, y);
+      x = sp.x; y = sp.y;
+    }
     drawingRef.current = { active: true, lastX: x, lastY: y, startX: x, startY: y, curX: x, curY: y, pts: [{ x, y, p: e.pressure || 0.5 }] };
     const ctx = layer.canvas.getContext("2d")!;
     if (tool === "eraserHard" || tool === "eraserSoft") {
