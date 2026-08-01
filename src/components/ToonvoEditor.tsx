@@ -1360,6 +1360,28 @@ export default function ToonvoEditor() {
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
 
+    if (pointersRef.current.has(e.pointerId)) {
+      const pc = eventToCanvas(e);
+      pointersRef.current.set(e.pointerId, { x: pc.x, y: pc.y });
+    }
+
+    // Two-finger gesture: rotate + pinch-scale the ruler
+    const g = gestureRef.current;
+    if (g.active && pointersRef.current.size >= 2) {
+      const [a, b] = Array.from(pointersRef.current.values()).slice(0, 2);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const k = Math.max(0.2, Math.min(6, dist / g.dist));
+      setRuler({
+        ...g.orig,
+        angle: g.orig.angle + (ang - g.angle),
+        w: Math.max(20, g.orig.w * k),
+        h: Math.max(20, g.orig.h * k),
+      });
+      render();
+      return;
+    }
+
     const d = drawingRef.current;
     if (!d.active) return;
 
@@ -1369,6 +1391,34 @@ export default function ToonvoEditor() {
       drawingRef.current.lastY = e.clientY;
       return;
     }
+
+    // Ruler handle drag
+    if (rulerActionRef.current.mode) {
+      const { x: gx, y: gy } = eventToCanvas(e);
+      const a = rulerActionRef.current;
+      const o = a.orig;
+      if (a.mode === "move" || a.mode === "vp") {
+        setRuler({ ...o, cx: o.cx + (gx - a.startX), cy: o.cy + (gy - a.startY) });
+      } else if (a.mode === "rot") {
+        setRuler({ ...o, angle: Math.atan2(gy - o.cy, gx - o.cx) + Math.PI / 2 });
+      } else if (a.mode === "start" || a.mode === "end") {
+        const fixedLocalX = a.mode === "start" ? o.w / 2 : -o.w / 2;
+        const fixed = rulerToWorld(o, fixedLocalX, 0);
+        const ncx = (fixed.x + gx) / 2, ncy = (fixed.y + gy) / 2;
+        const len = Math.hypot(gx - fixed.x, gy - fixed.y);
+        const ang = a.mode === "end"
+          ? Math.atan2(gy - fixed.y, gx - fixed.x)
+          : Math.atan2(fixed.y - gy, fixed.x - gx);
+        setRuler({ ...o, cx: ncx, cy: ncy, w: Math.max(10, len), angle: ang });
+      } else {
+        const p = rulerToLocal(o, gx, gy);
+        setRuler({ ...o, w: Math.max(20, Math.abs(p.x) * 2), h: Math.max(20, Math.abs(p.y) * 2) });
+      }
+      render();
+      return;
+    }
+
+
 
     // Selection drag update
     if (selActionRef.current.mode) {
