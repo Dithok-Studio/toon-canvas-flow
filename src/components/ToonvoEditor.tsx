@@ -66,6 +66,88 @@ type Selection =
 
 type Floating = { canvas: HTMLCanvasElement; x: number; y: number };
 
+// ---- Ruler / guide ----
+type RulerType = "none" | "line" | "ellipse" | "rect" | "perspective";
+type MirrorMode = "none" | "h" | "v" | "both";
+interface RulerState {
+  type: RulerType;
+  cx: number; cy: number;
+  w: number; h: number;
+  angle: number;
+  locked: boolean;
+  mirror: MirrorMode;
+}
+
+const rulerToLocal = (r: RulerState, x: number, y: number) => {
+  const c = Math.cos(-r.angle), s = Math.sin(-r.angle);
+  const dx = x - r.cx, dy = y - r.cy;
+  return { x: dx * c - dy * s, y: dx * s + dy * c };
+};
+const rulerToWorld = (r: RulerState, x: number, y: number) => {
+  const c = Math.cos(r.angle), s = Math.sin(r.angle);
+  return { x: r.cx + x * c - y * s, y: r.cy + x * s + y * c };
+};
+const rulerHandles = (r: RulerState): { id: string; x: number; y: number }[] => {
+  if (r.type === "line") {
+    const a = rulerToWorld(r, -r.w / 2, 0);
+    const b = rulerToWorld(r, r.w / 2, 0);
+    const rot = rulerToWorld(r, 0, -60);
+    return [{ id: "start", ...a }, { id: "end", ...b }, { id: "rot", ...rot }];
+  }
+  if (r.type === "perspective") {
+    return [{ id: "rot", ...rulerToWorld(r, 0, -60) }];
+  }
+  const hx = r.w / 2, hy = r.h / 2;
+  return [
+    { id: "nw", ...rulerToWorld(r, -hx, -hy) },
+    { id: "ne", ...rulerToWorld(r, hx, -hy) },
+    { id: "se", ...rulerToWorld(r, hx, hy) },
+    { id: "sw", ...rulerToWorld(r, -hx, hy) },
+    { id: "rot", ...rulerToWorld(r, 0, -hy - 60) },
+  ];
+};
+// Snap a point onto the active guide. (sx, sy) = stroke start (used by perspective).
+const snapToRuler = (r: RulerState, x: number, y: number, sx: number, sy: number) => {
+  if (r.type === "perspective") {
+    let vx = sx - r.cx, vy = sy - r.cy;
+    if (Math.hypot(vx, vy) < 1) { vx = x - r.cx; vy = y - r.cy; }
+    const len = Math.hypot(vx, vy) || 1;
+    const ux = vx / len, uy = vy / len;
+    const t = (x - r.cx) * ux + (y - r.cy) * uy;
+    return { x: r.cx + ux * t, y: r.cy + uy * t };
+  }
+  const p = rulerToLocal(r, x, y);
+  if (r.type === "line") {
+    const hx = Math.max(1, r.w / 2);
+    return rulerToWorld(r, Math.max(-hx, Math.min(hx, p.x)), 0);
+  }
+  if (r.type === "ellipse") {
+    const rx = Math.max(1, r.w / 2), ry = Math.max(1, r.h / 2);
+    const t = Math.atan2(p.y / ry, p.x / rx);
+    return rulerToWorld(r, Math.cos(t) * rx, Math.sin(t) * ry);
+  }
+  const hx = r.w / 2, hy = r.h / 2;
+  const cands = [
+    { x: Math.max(-hx, Math.min(hx, p.x)), y: -hy },
+    { x: Math.max(-hx, Math.min(hx, p.x)), y: hy },
+    { x: -hx, y: Math.max(-hy, Math.min(hy, p.y)) },
+    { x: hx, y: Math.max(-hy, Math.min(hy, p.y)) },
+  ];
+  let best = cands[0], bd = Infinity;
+  for (const c of cands) {
+    const d = Math.hypot(c.x - p.x, c.y - p.y);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return rulerToWorld(r, best.x, best.y);
+};
+const mirrorAcrossRuler = (r: RulerState, x: number, y: number, mode: "h" | "v" | "both") => {
+  const p = rulerToLocal(r, x, y);
+  const mx = mode === "h" || mode === "both" ? -p.x : p.x;
+  const my = mode === "v" || mode === "both" ? -p.y : p.y;
+  return rulerToWorld(r, mx, my);
+};
+
+
 const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: string; icon: string }[] }[] = [
   { title: "Stroke", tools: [
     { id: "pen", label: "Pen", key: "P", icon: "✒️" },
