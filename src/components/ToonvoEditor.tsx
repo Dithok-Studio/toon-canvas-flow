@@ -1621,9 +1621,10 @@ export default function ToonvoEditor() {
       if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
       if (e.key === "Enter") { commitFloatRef.current(); return; }
       const k = e.key.toLowerCase();
+      if (k === "r") { toggleRulerRef.current?.(); return; }
       const map: Record<string, Tool> = {
         p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
-        e: "eraserHard", g: "bucket", r: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
+        e: "eraserHard", g: "bucket", k: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
       };
       if (map[k]) { setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
