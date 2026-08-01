@@ -1874,8 +1874,33 @@ export default function ToonvoEditor() {
               <button className={"toolbtn " + (onion ? "active" : "")} onClick={() => setOnion(o => !o)}><span className="ticon">👻</span><span className="tlabel">Onion</span></button>
               <button className={"toolbtn " + (showGrid ? "active" : "")} onClick={() => setShowGrid(g => !g)}><span className="ticon">▦</span><span className="tlabel">Grid</span></button>
               <button className={"toolbtn " + (symmetry !== "none" ? "active" : "")} onClick={() => setSymmetry(s => s === "none" ? "h" : s === "h" ? "v" : s === "v" ? "both" : "none")}><span className="ticon">⇋</span><span className="tlabel">Sym:{symmetry}</span></button>
+              <button className={"toolbtn " + (ruler.type !== "none" ? "active" : "")} title="Ruler / Guide (R)" onClick={() => toggleRuler()}><span className="ticon">📐</span><span className="tlabel">Ruler</span></button>
             </div>
           </div>
+          {ruler.type !== "none" && (
+            <div className="onionopts">
+              <label>Guide
+                <select value={ruler.type} onChange={e => setRulerType(e.target.value as RulerType)}>
+                  <option value="line">Straight Line</option>
+                  <option value="ellipse">Circle / Oval</option>
+                  <option value="rect">Rectangle</option>
+                  <option value="perspective">Perspective</option>
+                </select>
+              </label>
+              <button
+                className={ruler.mirror !== "none" ? "active" : ""}
+                title="Mirror / symmetry across the guide"
+                onClick={() => setRuler(r => ({ ...r, mirror: r.mirror === "none" ? "h" : r.mirror === "h" ? "v" : r.mirror === "v" ? "both" : "none" }))}
+              >Mirror: {ruler.mirror}</button>
+              <button
+                className={ruler.locked ? "active" : ""}
+                title="Lock guide position"
+                onClick={() => setRuler(r => ({ ...r, locked: !r.locked }))}
+              >{ruler.locked ? "🔒 Locked" : "🔓 Unlocked"}</button>
+              <button onClick={() => setRulerType(ruler.type)}>Reset Position</button>
+              <button onClick={() => setRuler(r => ({ ...r, type: "none" }))}>Turn Off</button>
+            </div>
+          )}
           {onion && (
             <div className="onionopts">
               <label>Before {onionBefore}<input type="range" min={0} max={3} value={onionBefore} onChange={e => setOnionBefore(+e.target.value)} /></label>
