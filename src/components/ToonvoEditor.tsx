@@ -1452,7 +1452,13 @@ export default function ToonvoEditor() {
     const layer = frame.layers[frame.activeLayer];
     if (!layer || layer.locked) return;
 
-    const { x, y } = eventToCanvas(e);
+    const raw = eventToCanvas(e);
+    let x = raw.x, y = raw.y;
+    const guided = ruler.type !== "none" && !isShapeTool(tool);
+    if (guided) {
+      const sp = snapToRuler(ruler, x, y, d.startX, d.startY);
+      x = sp.x; y = sp.y;
+    }
     const ctx = layer.canvas.getContext("2d")!;
     drawingRef.current.curX = x; drawingRef.current.curY = y;
 
@@ -1464,7 +1470,7 @@ export default function ToonvoEditor() {
     }
 
     let nx = x, ny = y;
-    if (smoothing > 0) {
+    if (smoothing > 0 && !guided) {
       const s = smoothing / 10;
       nx = d.lastX + (x - d.lastX) * (1 - s * 0.7);
       ny = d.lastY + (y - d.lastY) * (1 - s * 0.7);
@@ -1488,6 +1494,17 @@ export default function ToonvoEditor() {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    if (gestureRef.current.active && pointersRef.current.size < 2) {
+      gestureRef.current = { active: false, dist: 1, angle: 0, orig: ruler };
+    }
+    if (rulerActionRef.current.mode) {
+      rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
+      drawingRef.current.active = false;
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      render();
+      return;
+    }
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
     panModeRef.current = false;
