@@ -168,7 +168,7 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "bucket", label: "Bucket", key: "G", icon: "🪣" },
   ]},
   { title: "Shapes", tools: [
-    { id: "rect", label: "Rectangle", key: "R", icon: "▭" },
+    { id: "rect", label: "Rectangle", key: "K", icon: "▭" },
     { id: "ellipse", label: "Ellipse", key: "O", icon: "◯" },
     { id: "line", label: "Line", key: "L", icon: "／" },
     { id: "polygon", label: "Polygon", icon: "⬡" },
