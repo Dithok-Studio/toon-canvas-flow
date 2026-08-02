@@ -1877,6 +1877,351 @@ export default function ToonvoEditor() {
   }, [currentFrame, playing, audioTracks, fps]);
 
 
+  // ------------- Frame selection, frame clipboard, layer & art clipboard ops -------------
+  const rebuildAllThumbs = () => {
+    setThumbs({});
+    setTimeout(() => { framesRef.current.forEach((_, i) => buildThumb(i)); }, 30);
+  };
+  const selectFrameAt = (i: number, ctrl: boolean, shift: boolean) => {
+    focusAreaRef.current = "timeline";
+    setSelectedFrames(prev => {
+      if (ctrl) return prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i].sort((a, b) => a - b);
+      if (shift) {
+        const anchor = prev.length ? prev[0] : currentRef.current;
+        const a = Math.min(anchor, i), b = Math.max(anchor, i);
+        const out: number[] = [];
+        for (let j = a; j <= b; j++) out.push(j);
+        return out;
+      }
+      return [i];
+    });
+    setCurrentFrame(i);
+  };
+  const selectAllFrames = () => { focusAreaRef.current = "timeline"; setSelectedFrames(framesRef.current.map((_, i) => i)); };
+  const insertFramesAt = (at: number, newFrames: Frame[]) => {
+    if (!newFrames.length) return;
+    const pos = Math.max(0, Math.min(at, framesRef.current.length));
+    setFrames(fs => { const arr = [...fs]; arr.splice(pos, 0, ...newFrames); return arr; });
+    setCurrentFrame(pos + newFrames.length - 1);
+    setSelectedFrames(newFrames.map((_, k) => pos + k));
+    rebuildAllThumbs();
+  };
+  const deleteFrames = (idxs: number[], silent = false) => {
+    const list = (idxs.length ? idxs : [currentRef.current]).slice().sort((a, b) => a - b);
+    const remaining = framesRef.current.length - list.length;
+    if (remaining < 1) { if (!silent) toast("Can't delete every frame"); return; }
+    setFrames(fs => fs.filter((_, i) => !list.includes(i)));
+    const next = Math.max(0, Math.min(list[0], remaining - 1));
+    setCurrentFrame(next);
+    setSelectedFrames([next]);
+    rebuildAllThumbs();
+    if (!silent) toast("Frame deleted");
+  };
+  const copyFrames = (idxs: number[], cut: boolean) => {
+    const list = (idxs.length ? idxs : [currentRef.current]).slice().sort((a, b) => a - b);
+    frameClipRef.current = list.map(i => framesRef.current[i]).filter(Boolean).map(f => cloneFrame(f, dims.w, dims.h));
+    setFrameClipCount(frameClipRef.current.length);
+    toast(cut ? "Frame cut!" : "Frame copied!");
+    if (cut) deleteFrames(list, true);
+  };
+  const pasteFrames = (inPlace: boolean) => {
+    const clip = frameClipRef.current;
+    if (!clip.length) { toast("Frame clipboard empty"); return; }
+    const copies = clip.map(f => cloneFrame(f, dims.w, dims.h));
+    insertFramesAt(inPlace ? currentRef.current : currentRef.current + 1, copies);
+    toast("Frame pasted!");
+  };
+  const duplicateFrames = (idxs: number[]) => {
+    const list = (idxs.length ? idxs : [currentRef.current]).slice().sort((a, b) => a - b);
+    const copies = list.map(i => framesRef.current[i]).filter(Boolean).map(f => cloneFrame(f, dims.w, dims.h));
+    insertFramesAt(list[list.length - 1] + 1, copies);
+    toast("Duplicated!");
+  };
+  const insertBlankFrame = (before: boolean) => {
+    insertFramesAt(before ? currentRef.current : currentRef.current + 1, [makeFrame(dims.w, dims.h)]);
+    toast("Blank frame inserted");
+  };
+  const reverseSelectedFrames = () => {
+    const list = selectedFramesRef.current.slice().sort((a, b) => a - b);
+    if (list.length < 2) { toast("Select 2+ frames first"); return; }
+    setFrames(fs => {
+      const arr = [...fs];
+      const picked = list.map(i => arr[i]).reverse();
+      list.forEach((idx, k) => { arr[idx] = picked[k]; });
+      return arr;
+    });
+    rebuildAllThumbs();
+    toast("Frames reversed");
+  };
+  const moveFrameBy = (delta: number) => {
+    const from = currentRef.current;
+    const to = from + delta;
+    if (to < 0 || to >= framesRef.current.length) return;
+    moveFrame(from, to);
+    setSelectedFrames([to]);
+  };
+
+  // ---------- Layer operations ----------
+  const layerToCanvas = (l: Layer) => {
+    const c = makeCanvas(dims.w, dims.h);
+    c.getContext("2d")!.drawImage(l.canvas, 0, 0);
+    return c;
+  };
+  const setClipCanvas = (c: HTMLCanvasElement) => {
+    clipboardRef.current = c;
+    clipOriginRef.current = { x: 0, y: 0 };
+    try { setClipThumb(c.toDataURL("image/png")); } catch { setClipThumb(null); }
+  };
+  const copyLayerContents = (idx: number) => {
+    const f = framesRef.current[currentRef.current];
+    const l = f?.layers[idx];
+    if (!l) return;
+    setClipCanvas(layerToCanvas(l));
+    toast("Layer copied!");
+  };
+  const pasteAsNewLayer = () => {
+    const cb = clipboardRef.current;
+    if (!cb) { toast("Clipboard empty"); return; }
+    setFrames(fs => fs.map((f, i) => {
+      if (i !== currentRef.current) return f;
+      const nl = makeLayer(dims.w, dims.h, `Layer ${f.layers.length + 1}`);
+      nl.canvas.getContext("2d")!.drawImage(cb, clipOriginRef.current.x, clipOriginRef.current.y);
+      return { ...f, layers: [...f.layers, nl], activeLayer: f.layers.length };
+    }));
+    setTimeout(() => buildThumb(currentRef.current), 30);
+    toast("Pasted!");
+  };
+  const mergeDown = (idx: number) => {
+    if (idx <= 0) { toast("No layer below"); return; }
+    pushHistory("Merge down");
+    setFrames(fs => fs.map((f, i) => {
+      if (i !== currentRef.current) return f;
+      const below = f.layers[idx - 1], top = f.layers[idx];
+      if (!below || !top) return f;
+      const ctx = below.canvas.getContext("2d")!;
+      ctx.save();
+      ctx.globalAlpha = top.opacity;
+      ctx.globalCompositeOperation = blendCss(top.blend);
+      ctx.drawImage(top.canvas, 0, 0);
+      ctx.restore();
+      const layers = f.layers.filter((_, j) => j !== idx);
+      return { ...f, layers, activeLayer: Math.max(0, idx - 1) };
+    }));
+    setTimeout(() => buildThumb(currentRef.current), 30);
+    toast("Layers merged");
+  };
+  const flattenInto = (onlyVisible: boolean) => {
+    pushHistory(onlyVisible ? "Merge visible" : "Flatten");
+    setFrames(fs => fs.map((f, i) => {
+      if (i !== currentRef.current) return f;
+      const merged = makeLayer(dims.w, dims.h, onlyVisible ? "Merged" : "Flattened");
+      const ctx = merged.canvas.getContext("2d")!;
+      f.layers.forEach(l => {
+        if (onlyVisible && !l.visible) return;
+        ctx.save();
+        ctx.globalAlpha = l.opacity;
+        ctx.globalCompositeOperation = blendCss(l.blend);
+        ctx.drawImage(l.canvas, 0, 0);
+        ctx.restore();
+      });
+      const kept = onlyVisible ? f.layers.filter(l => !l.visible) : [];
+      return { ...f, layers: [...kept, merged], activeLayer: kept.length };
+    }));
+    setTimeout(() => buildThumb(currentRef.current), 30);
+    toast(onlyVisible ? "Visible layers merged" : "Flattened");
+  };
+  const mergeVisible = () => flattenInto(true);
+  const flattenAll = () => flattenInto(false);
+  const clearLayer = (idx: number) => {
+    const f = framesRef.current[currentRef.current];
+    const l = f?.layers[idx];
+    if (!l) return;
+    pushHistory("Clear layer");
+    l.canvas.getContext("2d")!.clearRect(0, 0, dims.w, dims.h);
+    buildThumb(currentRef.current);
+    render();
+    toast("Layer cleared");
+  };
+
+  // ---------- Art selection operations ----------
+  const applySelection = (sel: Selection | null) => {
+    selectionRef.current = sel;
+    setSelection(sel);
+    render();
+  };
+  const selectAllLayer = () => {
+    commitFloating();
+    applySelection({ kind: "rect", x: 0, y: 0, w: dims.w, h: dims.h });
+    toast("Selected all");
+  };
+  const deselect = () => { escapeSelection(); };
+  const invertSelection = () => {
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const inv = invertMask(selMask(sel));
+    const bbox = maskBBox(inv);
+    if (!bbox) return;
+    applySelection({ kind: "mask", mask: inv, bbox });
+  };
+  const modifySelection = (op: "expand" | "contract" | "border" | "feather", px: number) => {
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const base = selMask(sel);
+    const out = op === "expand" ? expandMask(base, px)
+      : op === "contract" ? contractMask(base, px)
+      : op === "border" ? borderMask(base, px)
+      : featherMask(base, px);
+    const bbox = maskBBox(out);
+    if (!bbox) return;
+    applySelection({ kind: "mask", mask: out, bbox });
+  };
+  const fillSelection = () => {
+    const sel = selectionRef.current;
+    const frame = framesRef.current[currentRef.current];
+    const l = frame?.layers[frame.activeLayer];
+    if (!sel || !l || l.locked) return;
+    pushHistory("Fill selection");
+    const mask = selMask(sel);
+    const tmp = makeCanvas(dims.w, dims.h);
+    const tctx = tmp.getContext("2d")!;
+    tctx.fillStyle = color;
+    tctx.fillRect(0, 0, dims.w, dims.h);
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(mask, 0, 0);
+    l.canvas.getContext("2d")!.drawImage(tmp, 0, 0);
+    buildThumb(currentRef.current);
+    render();
+  };
+  const ensureFloating = (): Floating | null => {
+    if (floatingRef.current) return floatingRef.current;
+    const sel = selectionRef.current;
+    if (!sel) return null;
+    const fl = extractSelectionToFloating(sel);
+    if (fl) { floatingRef.current = fl; setFloating(fl); applySelection(null); }
+    return fl;
+  };
+  const replaceFloating = (canvas: HTMLCanvasElement, x: number, y: number) => {
+    const fl: Floating = { canvas, x, y };
+    floatingRef.current = fl;
+    setFloating(fl);
+    render();
+  };
+  const flipSelection = (axis: "h" | "v") => {
+    const fl = ensureFloating();
+    if (!fl) return;
+    const out = makeCanvas(fl.canvas.width, fl.canvas.height);
+    const ctx = out.getContext("2d")!;
+    ctx.translate(axis === "h" ? out.width : 0, axis === "v" ? out.height : 0);
+    ctx.scale(axis === "h" ? -1 : 1, axis === "v" ? -1 : 1);
+    ctx.drawImage(fl.canvas, 0, 0);
+    replaceFloating(out, fl.x, fl.y);
+  };
+  const rotateSelection = (deg: number) => {
+    const fl = ensureFloating();
+    if (!fl) return;
+    const rad = (deg * Math.PI) / 180;
+    const w = fl.canvas.width, h = fl.canvas.height;
+    const nw = Math.abs(Math.cos(rad)) * w + Math.abs(Math.sin(rad)) * h;
+    const nh = Math.abs(Math.sin(rad)) * w + Math.abs(Math.cos(rad)) * h;
+    const out = makeCanvas(Math.ceil(nw), Math.ceil(nh));
+    const ctx = out.getContext("2d")!;
+    ctx.translate(out.width / 2, out.height / 2);
+    ctx.rotate(rad);
+    ctx.drawImage(fl.canvas, -w / 2, -h / 2);
+    replaceFloating(out, fl.x + (w - out.width) / 2, fl.y + (h - out.height) / 2);
+  };
+  const scaleFloatingBy = (factor: number) => {
+    const fl = ensureFloating();
+    if (!fl) return;
+    const nw = Math.max(1, Math.round(fl.canvas.width * factor));
+    const nh = Math.max(1, Math.round(fl.canvas.height * factor));
+    const out = makeCanvas(nw, nh);
+    const ctx = out.getContext("2d")!;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(fl.canvas, 0, 0, nw, nh);
+    replaceFloating(out, fl.x + (fl.canvas.width - nw) / 2, fl.y + (fl.canvas.height - nh) / 2);
+  };
+  const nudgeSelection = (dx: number, dy: number) => {
+    if (floatingRef.current) {
+      const f = floatingRef.current;
+      replaceFloating(f.canvas, f.x + dx, f.y + dy);
+      return true;
+    }
+    const sel = selectionRef.current;
+    if (!sel) return false;
+    const fl = ensureFloating();
+    if (!fl) return false;
+    replaceFloating(fl.canvas, fl.x + dx, fl.y + dy);
+    return true;
+  };
+  const pasteInPlace = () => {
+    const cb = clipboardRef.current;
+    if (!cb) { toast("Clipboard empty"); return; }
+    commitFloating();
+    const o = clipOriginRef.current;
+    const fitsOnCanvas = o.x < dims.w && o.y < dims.h && o.x + cb.width > 0 && o.y + cb.height > 0;
+    const x = fitsOnCanvas ? o.x : (dims.w - cb.width) / 2;
+    const y = fitsOnCanvas ? o.y : (dims.h - cb.height) / 2;
+    replaceFloating(cb, x, y);
+    applySelection(null);
+    toast("Pasted!");
+  };
+  const duplicateInPlace = () => {
+    const sel = selectionRef.current;
+    const fl = floatingRef.current;
+    if (fl) {
+      const copy = makeCanvas(fl.canvas.width, fl.canvas.height);
+      copy.getContext("2d")!.drawImage(fl.canvas, 0, 0);
+      commitFloating();
+      replaceFloating(copy, fl.x, fl.y);
+      toast("Duplicated!");
+      return;
+    }
+    if (!sel) { toast("Nothing selected"); return; }
+    copySelection(false);
+    const cb = clipboardRef.current;
+    if (!cb) return;
+    const bbox = selBBox(sel);
+    replaceFloating(cb, bbox.x, bbox.y);
+    applySelection(null);
+    toast("Duplicated!");
+  };
+  const pasteToFrames = (indices: number[]) => {
+    const cb = clipboardRef.current;
+    if (!cb) { toast("Clipboard empty"); return; }
+    const o = clipOriginRef.current;
+    indices.forEach(i => {
+      const f = framesRef.current[i];
+      const l = f?.layers[Math.min(f.activeLayer, f.layers.length - 1)];
+      if (!l || l.locked) return;
+      l.canvas.getContext("2d")!.drawImage(cb, o.x, o.y);
+    });
+    rebuildAllThumbs();
+    render();
+    toast(`Pasted to ${indices.length} frame(s)`);
+  };
+
+  // ---------- Long-press helper (mobile context menus) ----------
+  const startLongPress = (e: React.PointerEvent, fn: () => void) => {
+    if (e.pointerType === "mouse") return;
+    cancelLongPress();
+    longPressRef.current = window.setTimeout(() => {
+      longPressRef.current = null;
+      if (typeof navigator !== "undefined" && navigator.vibrate) { try { navigator.vibrate(15); } catch { /* ignore */ } }
+      fn();
+    }, 500);
+  };
+  const cancelLongPress = () => {
+    if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
+  };
+
+  kbRef.current = {
+    selectedFrames: () => selectedFramesRef.current,
+    copyFrames, pasteFrames, duplicateFrames, deleteFrames, selectAllFrames,
+    selectAllLayer, deselect, invertSelection, duplicateInPlace, pasteInPlace,
+    nudge: nudgeSelection, toast,
+  };
+
   // ------------- Keyboard -------------
   // Keep imperative refs in sync so document listeners never see stale closures.
   undoRef.current = undo;
