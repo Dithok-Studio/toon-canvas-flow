@@ -605,6 +605,7 @@ export default function ToonvoEditor() {
     const drawSelPath = (s: Selection) => {
       ctx.beginPath();
       if (s.kind === "rect") ctx.rect(s.x, s.y, s.w, s.h);
+      else if (s.kind === "mask") ctx.rect(s.bbox.x, s.bbox.y, s.bbox.w, s.bbox.h);
       else {
         const p = s.points;
         if (p.length) {
