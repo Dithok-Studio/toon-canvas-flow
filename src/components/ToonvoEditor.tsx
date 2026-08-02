@@ -2894,7 +2894,7 @@ export default function ToonvoEditor() {
         </div>
 
         {/* Right sidebar */}
-        <aside className="right">
+        <aside className={"right" + (isTouchLayout && drawerOpen ? " open" : "")}>
           {/* Color */}
           <section className="panel">
             <h3>Color</h3>
