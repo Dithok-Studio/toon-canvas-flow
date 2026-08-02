@@ -6,6 +6,17 @@ import {
   deleteProject,
   type SavedProject,
 } from "@/lib/toonvo-db";
+import { useBreakpoint } from "@/hooks/use-breakpoint";
+import {
+  maskFromPath,
+  maskBBox,
+  invertMask,
+  expandMask,
+  contractMask,
+  borderMask,
+  featherMask,
+  magicWandMask,
+} from "@/lib/toonvo-selection";
 
 // ------------- Types -------------
 type BlendMode = "normal" | "multiply" | "screen" | "overlay" | "add";
