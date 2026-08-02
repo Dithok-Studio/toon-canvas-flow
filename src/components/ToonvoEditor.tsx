@@ -1519,6 +1519,20 @@ export default function ToonvoEditor() {
     if (!layer) return;
 
 
+    // ---- Magic wand ----
+    if (tool === "magicwand") {
+      commitFloating();
+      const mask = magicWandMask(layer.canvas, Math.floor(x), Math.floor(y), wandTolerance, wandContiguous);
+      const bb = maskBBox(mask);
+      if (!bb) { setSelection(null); selectionRef.current = null; toast("Nothing selected"); return; }
+      const sel: Selection = { kind: "mask", mask, bbox: bb };
+      selectionRef.current = sel;
+      setSelection(sel);
+      focusAreaRef.current = "canvas";
+      render();
+      return;
+    }
+
     // ---- Selection / Lasso ----
     if (tool === "select" || tool === "lasso") {
       // If clicking inside floating -> start moving it
