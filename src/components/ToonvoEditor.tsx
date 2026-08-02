@@ -2357,7 +2357,7 @@ export default function ToonvoEditor() {
       if (e.key.startsWith("Arrow") && !frameCtx) {
         const step = e.shiftKey ? 10 : 1;
         const d = e.key === "ArrowLeft" ? [-step, 0] : e.key === "ArrowRight" ? [step, 0] : e.key === "ArrowUp" ? [0, -step] : [0, step];
-        if (kb.nudge(d[0], d[1])) { e.preventDefault(); return; }
+        if (selectionRef.current || floatingRef.current) { e.preventDefault(); kb.nudge(d[0], d[1]); return; }
       }
       if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
       if (e.key === "Enter") { commitFloatRef.current(); return; }
