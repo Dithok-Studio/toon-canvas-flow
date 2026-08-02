@@ -1043,6 +1043,7 @@ export default function ToonvoEditor() {
   const buildSelPath = (ctx: CanvasRenderingContext2D, s: Selection, dx = 0, dy = 0) => {
     ctx.beginPath();
     if (s.kind === "rect") ctx.rect(s.x + dx, s.y + dy, s.w, s.h);
+    else if (s.kind === "mask") ctx.rect(s.bbox.x + dx, s.bbox.y + dy, s.bbox.w, s.bbox.h);
     else {
       const p = s.points;
       if (!p.length) return;
@@ -1051,10 +1052,20 @@ export default function ToonvoEditor() {
       ctx.closePath();
     }
   };
+  const selBBox = (s: Selection) => (s.kind === "rect" ? { x: s.x, y: s.y, w: s.w, h: s.h } : s.bbox);
+  /** Rasterise any selection into a full-canvas alpha mask. */
+  const selMask = (s: Selection): HTMLCanvasElement => {
+    if (s.kind === "mask") return s.mask;
+    return maskFromPath(dims.w, dims.h, (c) => buildSelPath(c, s));
+  };
   const selectionInside = (s: Selection, x: number, y: number) => {
-    const b = s.kind === "rect" ? { x: s.x, y: s.y, w: s.w, h: s.h } : s.bbox;
+    const b = selBBox(s);
     if (x < b.x || y < b.y || x > b.x + b.w || y > b.y + b.h) return false;
     if (s.kind === "rect") return true;
+    if (s.kind === "mask") {
+      const d = s.mask.getContext("2d", { willReadFrequently: true })!.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      return d[3] > 8;
+    }
     return pointInPolygon(x, y, s.points);
   };
   const commitFloating = () => {
