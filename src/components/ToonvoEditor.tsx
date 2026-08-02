@@ -461,6 +461,9 @@ export default function ToonvoEditor() {
   // ---- Magic wand ----
   const [wandTolerance, setWandTolerance] = useState(20);
   const [wandContiguous, setWandContiguous] = useState(true);
+  const [featherPx, setFeatherPx] = useState(0);
+  const [growPx, setGrowPx] = useState(2);
+  const [pasteTargetMenu, setPasteTargetMenu] = useState(false);
 
   const kbRef = useRef<{
     selectedFrames: () => number[];
