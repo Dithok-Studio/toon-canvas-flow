@@ -2517,6 +2517,136 @@ export default function ToonvoEditor() {
       {/* New Project Modal */}
       {showNew && <NewProjectModal onConfirm={startProject} onCancel={() => frames.length > 0 && setShowNew(false)} hasProject={frames.length > 0} onOpen={async () => { setSavedList(await listProjects()); setShowProjects(true); }} />}
       {showProjects && <ProjectsModal projects={savedList} onLoad={loadProject} onDelete={async (id) => { await deleteProject(id); setSavedList(await listProjects()); }} onClose={() => setShowProjects(false)} />}
+
+      {/* ---------- Mobile / tablet chrome ---------- */}
+      {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
+      {isTouchLayout && (
+        <>
+          <button className="tv-fab" style={{ background: color }} title="Color" aria-label="Color picker" onClick={() => setColorPopup(v => !v)} />
+          {colorPopup && (
+            <div className="tv-colorpop">
+              <input type="color" value={color} onChange={e => updateColor(e.target.value)} className="bigcolor" />
+              <input type="text" className="hex" value={color} onChange={e => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && updateColor(e.target.value)} />
+              <div className="recent">{recentColors.slice(0, 10).map((c, i) => <div key={i} className="rc" style={{ background: c }} onClick={() => updateColor(c)} />)}</div>
+              <label style={{ fontSize: 11, display: "block" }}>Opacity {Math.round(opacity * 100)}%
+                <input type="range" min={5} max={100} value={Math.round(opacity * 100)} onChange={e => setOpacity(+e.target.value / 100)} style={{ width: "100%" }} />
+              </label>
+              <label style={{ fontSize: 11, display: "block" }}>Size {size}px
+                <input type="range" min={1} max={200} value={size} onChange={e => setSize(+e.target.value)} style={{ width: "100%" }} />
+              </label>
+              <button onClick={() => setColorPopup(false)} style={{ width: "100%" }}>Close</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ---------- Selection operations toolbar ---------- */}
+      {(selection || floating) && (
+        <div className={"tv-seltools" + (isTouchLayout ? " touch" : "")}>
+          <button onClick={() => { copySelection(true); toast("Art cut!"); }} title="Cut (Ctrl+X)">✂️</button>
+          <button onClick={() => { copySelection(false); toast("Art copied!"); }} title="Copy (Ctrl+C)">📋</button>
+          <button onClick={() => { pasteClipboard(); toast("Pasted!"); }} title="Paste (Ctrl+V)">📌</button>
+          <button onClick={deleteSelection} title="Delete (Del)">🗑️</button>
+          <button onClick={() => flipSelection("h")} title="Flip horizontal">↔️</button>
+          <button onClick={() => flipSelection("v")} title="Flip vertical">↕️</button>
+          {!isTouchLayout && (
+            <>
+              <button onClick={fillSelection} title="Fill with foreground colour">🎨 Fill</button>
+              <button onClick={() => rotateSelection(90)} title="Rotate 90°">⟳</button>
+              <button onClick={() => scaleFloatingBy(1.1)} title="Scale up">＋</button>
+              <button onClick={() => scaleFloatingBy(0.9)} title="Scale down">－</button>
+              <button onClick={invertSelection} title="Invert selection (Ctrl+Shift+I)">Invert</button>
+              <label title="Feather edge">Feather
+                <input type="range" min={0} max={50} value={featherPx} onChange={e => { setFeatherPx(+e.target.value); modifySelection("feather", +e.target.value); }} />
+              </label>
+              <label title="Grow / shrink amount">±px
+                <input type="number" className="num" value={growPx} min={1} max={100} onChange={e => setGrowPx(+e.target.value)} />
+              </label>
+              <button onClick={() => modifySelection("expand", growPx)} title="Expand selection">Expand</button>
+              <button onClick={() => modifySelection("contract", growPx)} title="Contract selection">Contract</button>
+              <button onClick={() => modifySelection("border", growPx)} title="Border selection">Border</button>
+              <button onClick={() => setPasteTargetMenu(true)} title="Paste to other frames">Paste to…</button>
+            </>
+          )}
+          <button onClick={escapeSelection} title="Deselect (Ctrl+D)">✕</button>
+        </div>
+      )}
+
+      {pasteTargetMenu && (
+        <div className="modal" onClick={() => setPasteTargetMenu(false)}>
+          <div className="modalbox" onClick={e => e.stopPropagation()}>
+            <h2>Paste art to…</h2>
+            <button onClick={() => { pasteToFrames(frames.map((_, i) => i)); setPasteTargetMenu(false); }}>All frames</button>
+            <button onClick={() => { pasteToFrames(selectedFrames); setPasteTargetMenu(false); }}>Selected frames ({selectedFrames.length})</button>
+            <div className="modalactions"><button onClick={() => setPasteTargetMenu(false)}>Cancel</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Frame context menu / mobile bottom sheet ---------- */}
+      {frameMenu && (
+        <>
+          <div className="tv-menuscrim" onClick={() => setFrameMenu(null)} />
+          <div
+            className={isTouchLayout ? "tv-sheet" : "tv-menu"}
+            style={isTouchLayout ? undefined : { left: Math.min(frameMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 230), top: Math.max(8, frameMenu.y - 380) }}
+          >
+            {isTouchLayout && <div className="tv-sheet-title">Frame {frameMenu.index + 1}</div>}
+            <button onClick={() => { copyFrames(selectedFramesRef.current, true); setFrameMenu(null); }}>✂️ Cut frame(s) <span>Ctrl+X</span></button>
+            <button onClick={() => { copyFrames(selectedFramesRef.current, false); setFrameMenu(null); }}>📋 Copy frame(s) <span>Ctrl+C</span></button>
+            <button onClick={() => { pasteFrames(false); setFrameMenu(null); }}>📌 Paste frame <span>Ctrl+V</span></button>
+            <button onClick={() => { pasteFrames(true); setFrameMenu(null); }}>📍 Paste in place</button>
+            <button onClick={() => { duplicateFrames(selectedFramesRef.current); setFrameMenu(null); }}>⎘ Duplicate <span>Ctrl+D</span></button>
+            <button onClick={() => { deleteFrames(selectedFramesRef.current); setFrameMenu(null); }}>🗑️ Delete <span>Del</span></button>
+            <button onClick={() => { insertBlankFrame(true); setFrameMenu(null); }}>⬅ Insert blank before</button>
+            <button onClick={() => { insertBlankFrame(false); setFrameMenu(null); }}>➡ Insert blank after</button>
+            <button onClick={() => { selectAllFrames(); setFrameMenu(null); }}>▦ Select all frames <span>Ctrl+A</span></button>
+            <button onClick={() => { reverseSelectedFrames(); setFrameMenu(null); }}>⇄ Reverse selected</button>
+            <button onClick={() => { moveFrameBy(-1); setFrameMenu(null); }}>◀ Move left</button>
+            <button onClick={() => { moveFrameBy(1); setFrameMenu(null); }}>▶ Move right</button>
+            {isTouchLayout && <button onClick={() => setFrameMenu(null)}>Cancel</button>}
+          </div>
+        </>
+      )}
+
+      {/* ---------- Layer context menu ---------- */}
+      {layerMenu && (
+        <>
+          <div className="tv-menuscrim" onClick={() => setLayerMenu(null)} />
+          <div
+            className={isTouchLayout ? "tv-sheet" : "tv-menu"}
+            style={isTouchLayout ? undefined : { left: Math.min(layerMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 230), top: layerMenu.y }}
+          >
+            <button onClick={() => { copyLayerContents(layerMenu.index); setLayerMenu(null); }}>📋 Copy layer contents</button>
+            <button onClick={() => { pasteAsNewLayer(); setLayerMenu(null); }}>📌 Paste as new layer</button>
+            <button onClick={() => { duplicateLayer(layerMenu.index); setLayerMenu(null); toast("Duplicated!"); }}>⎘ Duplicate layer</button>
+            <button onClick={() => { mergeDown(layerMenu.index); setLayerMenu(null); }}>⇩ Merge with layer below</button>
+            <button onClick={() => { mergeVisible(); setLayerMenu(null); }}>⊕ Merge visible layers</button>
+            <button onClick={() => { flattenAll(); setLayerMenu(null); }}>▤ Flatten all layers</button>
+            <button onClick={() => { clearLayer(layerMenu.index); setLayerMenu(null); }}>🧹 Clear layer</button>
+            {isTouchLayout && <button onClick={() => setLayerMenu(null)}>Cancel</button>}
+          </div>
+        </>
+      )}
+
+      {/* ---------- Clipboard inspector ---------- */}
+      {showClipInfo && (
+        <div className="tv-clippop" onMouseLeave={() => setShowClipInfo(false)}>
+          <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1 }}>Clipboard</div>
+          {clipThumb && <img src={clipThumb} alt="Copied art preview" style={{ width: "100%", maxHeight: 90, objectFit: "contain", background: "#0a0a14", borderRadius: 4 }} />}
+          <div style={{ fontSize: 11 }}>{clipThumb ? "Art clip ready" : "No art clip"}</div>
+          <div style={{ fontSize: 11 }}>{frameClipCount > 0 ? `${frameClipCount} frame(s) in clipboard` : "No frame clip"}</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button style={{ flex: 1 }} onClick={() => { clipboardRef.current = null; frameClipRef.current = []; setClipThumb(null); setFrameClipCount(0); setShowClipInfo(false); }}>Clear</button>
+            <button style={{ flex: 1 }} onClick={() => setShowClipInfo(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Toasts ---------- */}
+      <div className="tv-toasts">
+        {toasts.map(t => <div key={t.id} className="tv-toast">{t.msg}</div>)}
+      </div>
     </div>
   );
 }
