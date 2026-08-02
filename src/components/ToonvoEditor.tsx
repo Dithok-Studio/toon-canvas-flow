@@ -1894,13 +1894,25 @@ export default function ToonvoEditor() {
       if (e.key === " " && !inField) { e.preventDefault(); if (!spaceDownRef.current) { spaceDownRef.current = true; setSpaceDown(true); } return; }
       // Undo/Redo must work even in fields for common expectation? Keep out of fields.
       if (inField) return;
+      const kb = kbRef.current;
+      const frameCtx = focusAreaRef.current === "timeline";
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();
         if (k === "z" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); undoRef.current(); return; }
         if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); e.stopPropagation(); redoRef.current(); return; }
-        if (k === "c") { e.preventDefault(); copySelRef.current(false); return; }
-        if (k === "x") { e.preventDefault(); copySelRef.current(true); return; }
-        if (k === "v") { e.preventDefault(); pasteRef.current(); return; }
+        if (k === "c") { e.preventDefault(); if (frameCtx) kb.copyFrames(kb.selectedFrames(), false); else { copySelRef.current(false); kb.toast("Art copied!"); } return; }
+        if (k === "x") { e.preventDefault(); if (frameCtx) kb.copyFrames(kb.selectedFrames(), true); else { copySelRef.current(true); kb.toast("Art cut!"); } return; }
+        if (k === "v") {
+          e.preventDefault();
+          if (frameCtx) kb.pasteFrames(false);
+          else if (e.shiftKey) kb.pasteInPlace();
+          else { pasteRef.current(); kb.toast("Pasted!"); }
+          return;
+        }
+        if (k === "d") { e.preventDefault(); if (frameCtx) kb.duplicateFrames(kb.selectedFrames()); else kb.deselect(); return; }
+        if (k === "j") { e.preventDefault(); kb.duplicateInPlace(); return; }
+        if (k === "a") { e.preventDefault(); if (frameCtx) kb.selectAllFrames(); else kb.selectAllLayer(); return; }
+        if (k === "i" && e.shiftKey) { e.preventDefault(); kb.invertSelection(); return; }
         if (k === "s") { e.preventDefault(); saveNowRef.current?.(); return; }
         if (k === "n") { e.preventDefault(); setShowNew(true); return; }
         if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom(z => Math.min(20, z * 1.2)); return; }
@@ -1909,16 +1921,25 @@ export default function ToonvoEditor() {
         if (k === "f" && e.shiftKey) { e.preventDefault(); fitToScreen(); return; }
         return;
       }
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelRef.current(); return; }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        if (frameCtx) kb.deleteFrames(kb.selectedFrames()); else deleteSelRef.current();
+        return;
+      }
+      if (e.key.startsWith("Arrow") && !frameCtx) {
+        const step = e.shiftKey ? 10 : 1;
+        const d = e.key === "ArrowLeft" ? [-step, 0] : e.key === "ArrowRight" ? [step, 0] : e.key === "ArrowUp" ? [0, -step] : [0, step];
+        if (kb.nudge(d[0], d[1])) { e.preventDefault(); return; }
+      }
       if (e.key === "Escape") { e.preventDefault(); escapeRef.current(); return; }
       if (e.key === "Enter") { commitFloatRef.current(); return; }
       const k = e.key.toLowerCase();
       if (k === "r") { toggleRulerRef.current?.(); return; }
       const map: Record<string, Tool> = {
-        p: "pen", n: "pencil", b: "brush", m: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
+        p: "pen", n: "pencil", b: "brush", m: "magicwand", y: "marker", a: "airbrush", i: "ink", c: "crayon", h: "charcoal",
         e: "eraserHard", g: "bucket", k: "rect", o: "ellipse", l: "lasso", s: "select", v: "move", t: "text",
       };
-      if (map[k]) { setTool(map[k]); return; }
+      if (map[k]) { focusAreaRef.current = "canvas"; setTool(map[k]); return; }
       if (e.key === "[") setSize(s => Math.max(1, s - 2));
       if (e.key === "]") setSize(s => Math.min(200, s + 2));
       if (!e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
