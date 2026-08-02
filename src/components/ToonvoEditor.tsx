@@ -58,11 +58,12 @@ type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
-  | "select" | "lasso" | "move" | "eyedropper" | "text";
+  | "select" | "lasso" | "magicwand" | "move" | "eyedropper" | "text";
 
 type Selection =
   | { kind: "rect"; x: number; y: number; w: number; h: number }
-  | { kind: "lasso"; points: { x: number; y: number }[]; bbox: { x: number; y: number; w: number; h: number } };
+  | { kind: "lasso"; points: { x: number; y: number }[]; bbox: { x: number; y: number; w: number; h: number } }
+  | { kind: "mask"; mask: HTMLCanvasElement; bbox: { x: number; y: number; w: number; h: number } };
 
 type Floating = { canvas: HTMLCanvasElement; x: number; y: number };
 
