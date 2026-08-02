@@ -2449,7 +2449,15 @@ export default function ToonvoEditor() {
                 const idx = frame.layers.indexOf(l);
                 const active = idx === frame.activeLayer;
                 return (
-                  <div key={l.id} className={"layeritem " + (active ? "active" : "")} onClick={() => setFrames(fs => fs.map((f, i) => i === currentFrame ? { ...f, activeLayer: idx } : f))}>
+                  <div
+                    key={l.id}
+                    className={"layeritem " + (active ? "active" : "")}
+                    onClick={() => setFrames(fs => fs.map((f, i) => i === currentFrame ? { ...f, activeLayer: idx } : f))}
+                    onContextMenu={(e) => { e.preventDefault(); setFrames(fs => fs.map((f, i) => i === currentFrame ? { ...f, activeLayer: idx } : f)); setLayerMenu({ x: e.clientX, y: e.clientY, index: idx }); }}
+                    onPointerDown={(e) => startLongPress(e, () => setLayerMenu({ x: e.clientX, y: e.clientY, index: idx }))}
+                    onPointerUp={cancelLongPress}
+                    onPointerLeave={cancelLongPress}
+                  >
                     <button className="iconbtn" onClick={(e) => { e.stopPropagation(); updateLayer(idx, { visible: !l.visible }); }}>{l.visible ? "👁" : "—"}</button>
                     <button className="iconbtn" onClick={(e) => { e.stopPropagation(); updateLayer(idx, { locked: !l.locked }); }}>{l.locked ? "🔒" : "🔓"}</button>
                     <input
