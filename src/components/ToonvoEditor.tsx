@@ -427,6 +427,58 @@ export default function ToonvoEditor() {
   const commitFloatRef = useRef<() => void>(() => {});
   const escapeRef = useRef<() => void>(() => {});
 
+  // ---- Responsive layout ----
+  const bp = useBreakpoint();
+  const isTouchLayout = bp !== "desktop";
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [colorPopup, setColorPopup] = useState(false);
+
+  // ---- Toasts ----
+  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+  const toastIdRef = useRef(0);
+  const toast = useCallback((msg: string) => {
+    const id = ++toastIdRef.current;
+    setToasts(t => [...t, { id, msg }]);
+    window.setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 1800);
+  }, []);
+
+  // ---- Frame selection & clipboards ----
+  const [selectedFrames, setSelectedFrames] = useState<number[]>([0]);
+  const selectedFramesRef = useRef<number[]>([0]);
+  selectedFramesRef.current = selectedFrames;
+  const frameClipRef = useRef<Frame[]>([]);
+  const [frameClipCount, setFrameClipCount] = useState(0);
+  const clipOriginRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [clipThumb, setClipThumb] = useState<string | null>(null);
+  const [showClipInfo, setShowClipInfo] = useState(false);
+
+  // ---- Context menus / focus / gestures ----
+  const [frameMenu, setFrameMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+  const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+  const focusAreaRef = useRef<"canvas" | "timeline">("canvas");
+  const longPressRef = useRef<number | null>(null);
+
+  // ---- Magic wand ----
+  const [wandTolerance, setWandTolerance] = useState(20);
+  const [wandContiguous, setWandContiguous] = useState(true);
+
+  const kbRef = useRef<{
+    selectedFrames: () => number[];
+    copyFrames: (idxs: number[], cut: boolean) => void;
+    pasteFrames: (inPlace: boolean) => void;
+    duplicateFrames: (idxs: number[]) => void;
+    deleteFrames: (idxs: number[], silent?: boolean) => void;
+    selectAllFrames: () => void;
+    selectAllLayer: () => void;
+    deselect: () => void;
+    invertSelection: () => void;
+    duplicateInPlace: () => void;
+    pasteInPlace: () => void;
+    nudge: (dx: number, dy: number) => void;
+    toast: (m: string) => void;
+  } | null>(null);
+
+
   const framesRef = useRef(frames);
   const currentRef = useRef(currentFrame);
   framesRef.current = frames;
