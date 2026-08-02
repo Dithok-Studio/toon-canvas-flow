@@ -1082,31 +1082,43 @@ export default function ToonvoEditor() {
     setFloating(null);
     render();
   };
+  const clampBox = (bbox: { x: number; y: number; w: number; h: number }, c: HTMLCanvasElement) => {
+    const bx = Math.max(0, Math.floor(bbox.x));
+    const by = Math.max(0, Math.floor(bbox.y));
+    return {
+      bx, by,
+      bw: Math.max(1, Math.floor(Math.min(bbox.w, c.width - bx))),
+      bh: Math.max(1, Math.floor(Math.min(bbox.h, c.height - by))),
+    };
+  };
+  /** Copy the selected pixels of `layer` into a standalone canvas. */
+  const cutoutFromLayer = (sel: Selection, layerCanvas: HTMLCanvasElement) => {
+    const { bx, by, bw, bh } = clampBox(selBBox(sel), layerCanvas);
+    const mask = selMask(sel);
+    const tmp = makeCanvas(bw, bh);
+    const tctx = tmp.getContext("2d")!;
+    tctx.drawImage(layerCanvas, -bx, -by);
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(mask, -bx, -by);
+    tctx.globalCompositeOperation = "source-over";
+    return { canvas: tmp, x: bx, y: by, mask };
+  };
+  const eraseSelectionFromLayer = (sel: Selection, layerCanvas: HTMLCanvasElement) => {
+    const ctx = layerCanvas.getContext("2d")!;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(selMask(sel), 0, 0);
+    ctx.restore();
+  };
   const extractSelectionToFloating = (sel: Selection): Floating | null => {
     const frame = framesRef.current[currentRef.current];
     const layer = frame?.layers[frame.activeLayer];
     if (!layer || layer.locked) return null;
-    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
-    const bx = Math.max(0, Math.floor(bbox.x));
-    const by = Math.max(0, Math.floor(bbox.y));
-    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
-    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
     pushHistory("Move selection");
-    const tmp = makeCanvas(bw, bh);
-    const tctx = tmp.getContext("2d")!;
-    tctx.save();
-    buildSelPath(tctx, sel, -bx, -by);
-    tctx.clip();
-    tctx.drawImage(layer.canvas, -bx, -by);
-    tctx.restore();
-    const lctx = layer.canvas.getContext("2d")!;
-    lctx.save();
-    buildSelPath(lctx, sel);
-    lctx.clip();
-    lctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-    lctx.restore();
+    const cut = cutoutFromLayer(sel, layer.canvas);
+    eraseSelectionFromLayer(sel, layer.canvas);
     buildThumb(currentRef.current);
-    return { canvas: tmp, x: bx, y: by };
+    return { canvas: cut.canvas, x: cut.x, y: cut.y };
   };
   const deleteSelection = () => {
     if (floatingRef.current) {
@@ -1121,12 +1133,7 @@ export default function ToonvoEditor() {
     const layer = frame?.layers[frame.activeLayer];
     if (!layer || layer.locked) return;
     pushHistory("Delete selection");
-    const ctx = layer.canvas.getContext("2d")!;
-    ctx.save();
-    buildSelPath(ctx, sel);
-    ctx.clip();
-    ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-    ctx.restore();
+    eraseSelectionFromLayer(sel, layer.canvas);
     buildThumb(currentRef.current);
     render();
   };
@@ -1137,33 +1144,32 @@ export default function ToonvoEditor() {
       const clip = makeCanvas(f.canvas.width, f.canvas.height);
       clip.getContext("2d")!.drawImage(f.canvas, 0, 0);
       clipboardRef.current = clip;
+      clipOriginRef.current = { x: f.x, y: f.y };
+      try { setClipThumb(clip.toDataURL("image/png")); } catch { setClipThumb(null); }
       if (cut) { floatingRef.current = null; setFloating(null); render(); }
       return;
     }
     if (!sel) return;
-    const bbox = sel.kind === "rect" ? { x: sel.x, y: sel.y, w: sel.w, h: sel.h } : sel.bbox;
     const frame = framesRef.current[currentRef.current];
     const layer = frame?.layers[frame.activeLayer];
     if (!layer) return;
-    const bx = Math.max(0, Math.floor(bbox.x));
-    const by = Math.max(0, Math.floor(bbox.y));
-    const bw = Math.max(1, Math.floor(Math.min(bbox.w, layer.canvas.width - bx)));
-    const bh = Math.max(1, Math.floor(Math.min(bbox.h, layer.canvas.height - by)));
-    const tmp = makeCanvas(bw, bh);
-    const tctx = tmp.getContext("2d")!;
-    tctx.save();
-    buildSelPath(tctx, sel, -bx, -by);
-    tctx.clip();
-    tctx.drawImage(layer.canvas, -bx, -by);
-    tctx.restore();
-    clipboardRef.current = tmp;
+    const out = cutoutFromLayer(sel, layer.canvas);
+    clipboardRef.current = out.canvas;
+    clipOriginRef.current = { x: out.x, y: out.y };
+    try { setClipThumb(out.canvas.toDataURL("image/png")); } catch { setClipThumb(null); }
     if (cut) deleteSelection();
   };
   const pasteClipboard = () => {
     const cb = clipboardRef.current;
     if (!cb) return;
     commitFloating();
-    const fl: Floating = { canvas: cb, x: (dims.w - cb.width) / 2, y: (dims.h - cb.height) / 2 };
+    const o = clipOriginRef.current;
+    const onScreen = o.x < dims.w && o.y < dims.h && o.x + cb.width > 0 && o.y + cb.height > 0;
+    const fl: Floating = {
+      canvas: cb,
+      x: onScreen ? o.x : (dims.w - cb.width) / 2,
+      y: onScreen ? o.y : (dims.h - cb.height) / 2,
+    };
     floatingRef.current = fl;
     setFloating(fl);
     setSelection(null);
