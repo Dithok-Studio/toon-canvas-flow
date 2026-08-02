@@ -2078,6 +2078,12 @@ export default function ToonvoEditor() {
           <span style={{ fontSize: 11, color: "#8b8ba8", textTransform: "uppercase", letterSpacing: 1 }}>
             {TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === tool)?.label ?? tool}
           </span>
+          {tool === "magicwand" && (
+            <>
+              <label>Tolerance <input type="range" min={0} max={100} value={wandTolerance} onChange={e => setWandTolerance(+e.target.value)} /><span style={{ minWidth: 28 }}>{wandTolerance}</span></label>
+              <label><input type="checkbox" checked={wandContiguous} onChange={e => setWandContiguous(e.target.checked)} /> Contiguous</label>
+            </>
+          )}
           {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft","bucket"].includes(tool) && (
             <>
               <label>Size <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
