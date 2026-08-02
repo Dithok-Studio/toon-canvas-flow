@@ -2035,12 +2035,33 @@ export default function ToonvoEditor() {
   const layer = frame?.layers[frame.activeLayer];
 
   return (
-    <div className="toonvo">
+    <div className={"toonvo " + bp}>
       {/* Top bar */}
       <header className="topbar">
+        {isTouchLayout && (
+          <button className="tv-hamburger" aria-label="Menu" onClick={() => setDrawerOpen(o => !o)}>☰</button>
+        )}
         <div className="brand">
           <span className="logo">●</span> TOONVO
         </div>
+        {isTouchLayout && (
+          <div className="tv-mobtop">
+            <button onClick={undo} disabled={history.length === 0} title="Undo">↩</button>
+            <button onClick={redo} disabled={redoStack.length === 0} title="Redo">↪</button>
+            <button onClick={saveNow} title="Save">💾</button>
+            <button onClick={() => setDrawerOpen(true)} title="More">⋮</button>
+          </div>
+        )}
+        {(clipThumb || frameClipCount > 0) && (
+          <button
+            className="tv-clipind"
+            title="Clipboard"
+            onClick={() => setShowClipInfo(v => !v)}
+            onMouseEnter={() => setShowClipInfo(true)}
+          >
+            📋{clipThumb && <img src={clipThumb} alt="Clipboard preview" />}{frameClipCount > 0 && <span className="tv-clipcount">{frameClipCount}f</span>}
+          </button>
+        )}
         <div className="filemenu">
           <button onClick={() => setShowNew(true)}>New</button>
           <button onClick={async () => { setSavedList(await listProjects()); setShowProjects(true); }}>Open</button>
