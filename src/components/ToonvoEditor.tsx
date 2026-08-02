@@ -2364,12 +2364,16 @@ export default function ToonvoEditor() {
               <button onClick={() => addFrame(true)}>Duplicate</button>
               <button onClick={() => deleteFrame(currentFrame)}>Delete</button>
             </div>
-            <div className="frames">
+            <div className="frames" onPointerDown={() => { focusAreaRef.current = "timeline"; }}>
               {frames.map((f, i) => (
                 <div
                   key={i}
-                  className={"frameitem " + (i === currentFrame ? "active" : "")}
-                  onClick={() => setCurrentFrame(i)}
+                  className={"frameitem " + (i === currentFrame ? "active" : "") + (selectedFrames.includes(i) ? " selected" : "")}
+                  onClick={(e) => selectFrameAt(i, e.ctrlKey || e.metaKey, e.shiftKey)}
+                  onContextMenu={(e) => { e.preventDefault(); focusAreaRef.current = "timeline"; if (!selectedFramesRef.current.includes(i)) selectFrameAt(i, false, false); setFrameMenu({ x: e.clientX, y: e.clientY, index: i }); }}
+                  onPointerDown={(e) => startLongPress(e, () => { focusAreaRef.current = "timeline"; if (!selectedFramesRef.current.includes(i)) selectFrameAt(i, false, false); setFrameMenu({ x: e.clientX, y: e.clientY, index: i }); })}
+                  onPointerUp={cancelLongPress}
+                  onPointerLeave={cancelLongPress}
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData("text/plain", String(i))}
                   onDragOver={(e) => e.preventDefault()}
@@ -2391,6 +2395,7 @@ export default function ToonvoEditor() {
                   </div>
                 </div>
               ))}
+              {isTouchLayout && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
             </div>
           </div>
         </div>
