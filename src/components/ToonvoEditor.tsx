@@ -2322,6 +2322,7 @@ export default function ToonvoEditor() {
       // Undo/Redo must work even in fields for common expectation? Keep out of fields.
       if (inField) return;
       const kb = kbRef.current;
+      if (!kb) return;
       const frameCtx = focusAreaRef.current === "timeline";
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();
