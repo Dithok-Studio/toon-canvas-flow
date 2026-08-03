@@ -274,6 +274,7 @@ function floodFill(canvas: HTMLCanvasElement, x: number, y: number, hex: string)
 export default function ToonvoEditor() {
   const [showNew, setShowNew] = useState(true);
   const [showProjects, setShowProjects] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [savedList, setSavedList] = useState<SavedProject[]>([]);
 
   const [projectId, setProjectId] = useState<string>(uid());
