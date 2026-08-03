@@ -2532,7 +2532,8 @@ export default function ToonvoEditor() {
           <button onClick={() => setShowNew(true)}>New</button>
           <button onClick={async () => { setSavedList(await listProjects()); setShowProjects(true); }}>Open</button>
           <button onClick={saveNow}>Save</button>
-          <button onClick={exportToonvo}>Export</button>
+          <button className="primary" onClick={() => setShowExport(true)} title="Export MP4 / GIF / Sprite / PNG">⬆ Export</button>
+          <button onClick={exportToonvo} title="Download project file">.toonvo</button>
           <button onClick={() => bgFileRef.current?.click()} title="Import Background Image">🖼️＋ BG</button>
           <button onClick={() => refFileRef.current?.click()} title="Import Reference Image" disabled={refImages.length >= 3}>👁 Ref</button>
           <button onClick={() => audioFileRef.current?.click()} title="Import Audio" disabled={audioTracks.length >= 3}>🎵 Audio</button>
