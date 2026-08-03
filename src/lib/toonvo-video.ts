@@ -191,7 +191,6 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   });
   recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   recorder.onerror = (e) => console.warn("[toonvo] recorder error", e);
-  console.log("[toonvo] recording", { mime, outW, outH, fps, frames: frames.length });
 
   const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
   recorder.start(200);
