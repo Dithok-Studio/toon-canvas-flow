@@ -7,6 +7,7 @@ import {
   type SavedProject,
 } from "@/lib/toonvo-db";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
+import ExportModal from "@/components/ExportModal";
 import {
   maskFromPath,
   maskBBox,
@@ -274,6 +275,7 @@ function floodFill(canvas: HTMLCanvasElement, x: number, y: number, hex: string)
 export default function ToonvoEditor() {
   const [showNew, setShowNew] = useState(true);
   const [showProjects, setShowProjects] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [savedList, setSavedList] = useState<SavedProject[]>([]);
 
   const [projectId, setProjectId] = useState<string>(uid());
@@ -2532,7 +2534,8 @@ export default function ToonvoEditor() {
           <button onClick={() => setShowNew(true)}>New</button>
           <button onClick={async () => { setSavedList(await listProjects()); setShowProjects(true); }}>Open</button>
           <button onClick={saveNow}>Save</button>
-          <button onClick={exportToonvo}>Export</button>
+          <button className="primary" onClick={() => setShowExport(true)} title="Export MP4 / GIF / Sprite / PNG">⬆ Export</button>
+          <button onClick={exportToonvo} title="Download project file">.toonvo</button>
           <button onClick={() => bgFileRef.current?.click()} title="Import Background Image">🖼️＋ BG</button>
           <button onClick={() => refFileRef.current?.click()} title="Import Reference Image" disabled={refImages.length >= 3}>👁 Ref</button>
           <button onClick={() => audioFileRef.current?.click()} title="Import Audio" disabled={audioTracks.length >= 3}>🎵 Audio</button>
@@ -3023,6 +3026,16 @@ export default function ToonvoEditor() {
       {/* New Project Modal */}
       {showNew && <NewProjectModal onConfirm={startProject} onCancel={() => frames.length > 0 && setShowNew(false)} hasProject={frames.length > 0} onOpen={async () => { setSavedList(await listProjects()); setShowProjects(true); }} />}
       {showProjects && <ProjectsModal projects={savedList} onLoad={loadProject} onDelete={async (id) => { await deleteProject(id); setSavedList(await listProjects()); }} onClose={() => setShowProjects(false)} />}
+      {showExport && (
+        <ExportModal
+          frames={frames}
+          dims={dims}
+          fps={fps}
+          projectName={projectName}
+          audio={audioTracks}
+          onClose={() => setShowExport(false)}
+        />
+      )}
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
