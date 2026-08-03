@@ -3025,6 +3025,16 @@ export default function ToonvoEditor() {
       {/* New Project Modal */}
       {showNew && <NewProjectModal onConfirm={startProject} onCancel={() => frames.length > 0 && setShowNew(false)} hasProject={frames.length > 0} onOpen={async () => { setSavedList(await listProjects()); setShowProjects(true); }} />}
       {showProjects && <ProjectsModal projects={savedList} onLoad={loadProject} onDelete={async (id) => { await deleteProject(id); setSavedList(await listProjects()); }} onClose={() => setShowProjects(false)} />}
+      {showExport && (
+        <ExportModal
+          frames={frames}
+          dims={dims}
+          fps={fps}
+          projectName={projectName}
+          audio={audioTracks}
+          onClose={() => setShowExport(false)}
+        />
+      )}
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
