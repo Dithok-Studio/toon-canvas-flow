@@ -7,6 +7,7 @@ import {
   type SavedProject,
 } from "@/lib/toonvo-db";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
+import ExportModal from "@/components/ExportModal";
 import {
   maskFromPath,
   maskBBox,
