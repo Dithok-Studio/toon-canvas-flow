@@ -242,6 +242,25 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   });
 
   onProgress(frames.length, frames.length);
+  // Tail: keep the stream alive briefly so the encoder flushes at least one
+  // full chunk (short animations otherwise produce a 0-byte file).
+  if (!signal.cancelled) {
+    const tailStart = performance.now();
+    await new Promise<void>((resolve) => {
+      const tail = () => {
+        const t = performance.now() - tailStart;
+        const last = frames[frames.length - 1];
+        if (last) {
+          drawFrame(ctx, last, outW, outH);
+          if (watermark) drawWatermark(ctx, outW, outH, { timeMs: totalMs + t });
+        }
+        if (t >= 600) resolve();
+        else requestAnimationFrame(tail);
+      };
+      requestAnimationFrame(tail);
+    });
+  }
+  try { recorder.requestData(); } catch { /* ignore */ }
   try { recorder.stop(); } catch { /* ignore */ }
   await stopped;
   sources.forEach((s) => { try { s.stop(); } catch { /* ignore */ } });
