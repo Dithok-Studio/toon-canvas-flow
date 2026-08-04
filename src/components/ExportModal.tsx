@@ -80,8 +80,8 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
   }, [frames, dims, wmConfig]);
 
   const wmConfig: WatermarkConfig | null = useMemo(() => {
-    const proNoMark = !isFree && !customImg;
-    if (proNoMark || !wm.enabled) return null;
+    if (!isFree && !wm.enabled) return null;
+    if (!wm.enabled) return null;
     if (isFree && tab === "mp4" && res === 1080) return null;
     return { ...wm, image: !isFree ? customImg : null, imageAspect: customImg ? customImg.width / customImg.height : 1 };
   }, [wm, isFree, customImg, tab, res]);
