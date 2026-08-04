@@ -65,6 +65,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
   const mimeInfo = useMemo(() => pickMime(), []);
 
   useEffect(() => { setPlan(getPlanTier()); }, []);
+  useEffect(() => { setWm(w => ({ ...w, enabled: plan === "free" })); }, [plan]);
   useEffect(() => { if (isFree && res === 1080) setRes(720); }, [isFree, res]);
 
   const wmConfig: WatermarkConfig | null = useMemo(() => {
