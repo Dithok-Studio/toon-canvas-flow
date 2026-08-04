@@ -3,7 +3,7 @@
  * Real-time capture of an offscreen canvas stream, optional mixed audio,
  * optional moving watermark. Works fully offline.
  */
-import { drawWatermark } from "./watermark";
+import { drawWatermark, type WatermarkConfig } from "./watermark";
 
 export type CanvasFormat = "horizontal" | "vertical" | "square" | "custom";
 
@@ -126,7 +126,7 @@ export interface RenderOptions {
   outH: number;
   fps: number;
   quality: "low" | "medium" | "high";
-  watermark: boolean;
+  watermark: WatermarkConfig | null;
   audio: ExportAudioLike[];
   onProgress: (frameIndex: number, total: number) => void;
   signal: { cancelled: boolean };
@@ -237,7 +237,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       const f = frames[idx];
       if (!f) return;
       drawFrame(ctx, f, outW, outH);
-      if (watermark) drawWatermark(ctx, outW, outH, { timeMs: elapsed });
+      if (watermark) drawWatermark(ctx, outW, outH, watermark);
     };
     requestAnimationFrame(tick);
   });
@@ -253,7 +253,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         const last = frames[frames.length - 1];
         if (last) {
           drawFrame(ctx, last, outW, outH);
-          if (watermark) drawWatermark(ctx, outW, outH, { timeMs: totalMs + t });
+          if (watermark) drawWatermark(ctx, outW, outH, watermark);
         }
         if (t >= 600) resolve();
         else requestAnimationFrame(tail);
