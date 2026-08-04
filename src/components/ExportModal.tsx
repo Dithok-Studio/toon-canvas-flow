@@ -13,7 +13,16 @@ import {
   type ExportAudioLike,
 } from "@/lib/toonvo-video";
 import { encodeGif } from "@/lib/toonvo-gif";
-import { getPlanTier, setPlanTier, drawWatermark, type PlanTier } from "@/lib/watermark";
+import {
+  getPlanTier,
+  setPlanTier,
+  drawWatermark,
+  defaultWatermark,
+  type PlanTier,
+  type WatermarkConfig,
+  type WatermarkType,
+  type WatermarkPosition,
+} from "@/lib/watermark";
 
 type Tab = "mp4" | "gif" | "sprite" | "png";
 type Res = 480 | 720 | 1080;
@@ -44,6 +53,8 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
   const [status, setStatus] = useState<string | null>(null);
   const [result, setResult] = useState<{ blob: Blob; name: string; url: string; fallback: boolean } | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [wm, setWm] = useState<WatermarkConfig>(() => defaultWatermark("mp4"));
+  const [customImg, setCustomImg] = useState<HTMLImageElement | null>(null);
 
   const cancelRef = useRef({ cancelled: false });
   const previewRef = useRef<HTMLCanvasElement>(null);
@@ -65,8 +76,15 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     c.width = pw; c.height = ph;
     const ctx = c.getContext("2d")!;
     drawFrame(ctx, frames[0], pw, ph);
-    if (isFree && tab !== "png") drawWatermark(ctx, pw, ph, { timeMs: 1200, fixed: tab === "sprite" });
-  }, [frames, dims, isFree, tab]);
+    if (wmConfig) drawWatermark(ctx, pw, ph, wmConfig);
+  }, [frames, dims, wmConfig]);
+
+  const wmConfig: WatermarkConfig | null = useMemo(() => {
+    const proNoMark = !isFree && !customImg;
+    if (proNoMark || !wm.enabled) return null;
+    if (isFree && tab === "mp4" && res === 1080) return null;
+    return { ...wm, image: !isFree ? customImg : null, imageAspect: customImg ? customImg.width / customImg.height : 1 };
+  }, [wm, isFree, customImg, tab, res]);
 
   const out = outputSize(dims.w, dims.h, res);
   const durationSec = frames.reduce((a, f) => a + ((f.duration || 100) / 100) / Math.max(1, customFps), 0);
@@ -105,7 +123,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
         outW: out.w, outH: out.h,
         fps: customFps,
         quality,
-        watermark: isFree,
+        watermark: wmConfig,
         audio,
         signal: cancelRef.current,
         onProgress: (i, n) => {
@@ -139,7 +157,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     for (let i = 0; i < frames.length; i++) {
       if (cancelRef.current.cancelled) { setBusy(false); return; }
       drawFrame(ctx, frames[i], gw, gh);
-      if (isFree) drawWatermark(ctx, gw, gh, { timeMs: (i / customFps) * 1000 });
+      if (wmConfig) drawWatermark(ctx, gw, gh, wmConfig);
       gifFrames.push({
         data: ctx.getImageData(0, 0, gw, gh).data,
         delayMs: (1000 / customFps) * ((frames[i].duration || 100) / 100),
@@ -168,7 +186,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
       ctx.drawImage(tile, (i % cols) * dims.w, Math.floor(i / cols) * dims.h);
       setProgress({ i: i + 1, n: frames.length });
     });
-    if (isFree) drawWatermark(ctx, c.width, c.height, { timeMs: 0, fixed: true });
+    if (wmConfig) drawWatermark(ctx, c.width, c.height, wmConfig);
     const blob: Blob = await new Promise(r => c.toBlob(b => r(b!), "image/png")!);
     finish(blob, `${baseName}-sprite-${cols}x${rows}.png`);
     setBusy(false);
@@ -186,7 +204,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     let lastName = "";
     for (const i of list) {
       drawFrame(ctx, frames[i], dims.w, dims.h);
-      if (isFree) drawWatermark(ctx, dims.w, dims.h, { timeMs: 0, fixed: true });
+      if (wmConfig) drawWatermark(ctx, dims.w, dims.h, wmConfig);
       const blob: Blob = await new Promise(r => c.toBlob(b => r(b!), "image/png")!);
       lastName = `${baseName}-frame-${String(i + 1).padStart(3, "0")}.png`;
       if (pngAll) downloadBlob(blob, lastName);
@@ -228,7 +246,10 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
         <div className="tv-tabs">
           {(["mp4", "gif", "sprite", "png"] as Tab[]).map(t => (
             <button key={t} className={tab === t ? "active" : ""} disabled={busy}
-              onClick={() => { setTab(t); clearResult(); setStatus(null); }}>
+              onClick={() => {
+                setTab(t); clearResult(); setStatus(null);
+                setWm(w => ({ ...w, ...defaultWatermark(t), enabled: w.enabled }));
+              }}>
               {t === "mp4" ? "MP4" : t === "gif" ? "GIF" : t === "sprite" ? "Sprite Sheet" : "PNG"}
             </button>
           ))}
@@ -323,6 +344,82 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
                 <div className="tv-hint">{pngAll ? `${frames.length} files` : "First frame only"} at {dims.w}×{dims.h}.</div>
               </>
             )}
+
+            <div className="tv-wm">
+              <div className="tv-wmhead">
+                <strong>Watermark Settings</strong>
+                {!isFree && (
+                  <label className="tv-wmtoggle">
+                    <input type="checkbox" checked={wm.enabled} disabled={busy}
+                      onChange={e => setWm(w => ({ ...w, enabled: e.target.checked }))} />
+                    Add my watermark
+                  </label>
+                )}
+              </div>
+
+              {isFree && (
+                <div className="tv-hint">Free plan includes a watermark — pick the style and position you prefer.</div>
+              )}
+              {!isFree && (
+                <div className="tv-hint">Pro: watermark is off. Enable it to brand exports with your own logo.</div>
+              )}
+
+              {(isFree || wm.enabled) && (
+                <>
+                  <label>Type
+                    <div className="tv-radios">
+                      {(["logo", "tiled", "text"] as WatermarkType[]).map(t => (
+                        <button key={t} disabled={busy} className={wm.type === t ? "active" : ""}
+                          onClick={() => setWm(w => ({ ...w, type: t }))}>
+                          {t === "logo" ? "Logo (corner)" : t === "tiled" ? "Tiled pattern" : "Text"}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+
+                  {wm.type !== "tiled" && (
+                    <label>Position
+                      <div className="tv-radios tv-wmpos">
+                        {([["tl", "Top Left"], ["tr", "Top Right"], ["bl", "Bottom Left"], ["br", "Bottom Right"], ["center", "Center"]] as [WatermarkPosition, string][]).map(([p, lbl]) => (
+                          <button key={p} disabled={busy} className={wm.position === p ? "active" : ""}
+                            onClick={() => setWm(w => ({ ...w, position: p }))}>{lbl}</button>
+                        ))}
+                      </div>
+                    </label>
+                  )}
+
+                  {wm.type === "text" && (
+                    <label>Text
+                      <input type="text" value={wm.text} disabled={busy}
+                        onChange={e => setWm(w => ({ ...w, text: e.target.value }))} />
+                    </label>
+                  )}
+
+                  <label>Opacity — {Math.round(wm.opacity * 100)}%
+                    <input type="range" min={20} max={70} step={1} value={Math.round(wm.opacity * 100)} disabled={busy}
+                      onChange={e => setWm(w => ({ ...w, opacity: +e.target.value / 100 }))} />
+                  </label>
+
+                  <label>Size — {Math.round(wm.size * 100)}% of canvas
+                    <input type="range" min={10} max={30} step={1} value={Math.round(wm.size * 100)} disabled={busy}
+                      onChange={e => setWm(w => ({ ...w, size: +e.target.value / 100 }))} />
+                  </label>
+
+                  {!isFree && (
+                    <label>Custom watermark (PNG)
+                      <input type="file" accept="image/png,image/*" disabled={busy}
+                        onChange={e => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const img = new Image();
+                          img.onload = () => setCustomImg(img);
+                          img.src = URL.createObjectURL(f);
+                        }} />
+                    </label>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {/* preview */}
@@ -330,7 +427,7 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
             <div className="tv-badge">{formatLabel(fmt)}</div>
             <canvas ref={previewRef} className="tv-prevcanvas" />
             <div className="tv-hint">Estimated size ≈ {humanSize(Math.round(estBytes))}</div>
-            {isFree && <div className="tv-hint">Watermark preview shown above (free plan).</div>}
+            {wmConfig && <div className="tv-hint">Watermark preview shown above.</div>}
           </div>
         </div>
 
