@@ -67,6 +67,12 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
   useEffect(() => { setPlan(getPlanTier()); }, []);
   useEffect(() => { if (isFree && res === 1080) setRes(720); }, [isFree, res]);
 
+  const wmConfig: WatermarkConfig | null = useMemo(() => {
+    if (!wm.enabled) return null;
+    if (tab === "mp4" && res === 1080) return isFree ? null : { ...wm, image: customImg, imageAspect: customImg ? customImg.width / customImg.height : 1 };
+    return { ...wm, image: !isFree ? customImg : null, imageAspect: customImg ? customImg.width / customImg.height : 1 };
+  }, [wm, isFree, customImg, tab, res]);
+
   // preview of first frame + watermark
   useEffect(() => {
     const c = previewRef.current;
@@ -79,12 +85,6 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     if (wmConfig) drawWatermark(ctx, pw, ph, wmConfig);
   }, [frames, dims, wmConfig]);
 
-  const wmConfig: WatermarkConfig | null = useMemo(() => {
-    if (!isFree && !wm.enabled) return null;
-    if (!wm.enabled) return null;
-    if (isFree && tab === "mp4" && res === 1080) return null;
-    return { ...wm, image: !isFree ? customImg : null, imageAspect: customImg ? customImg.width / customImg.height : 1 };
-  }, [wm, isFree, customImg, tab, res]);
 
   const out = outputSize(dims.w, dims.h, res);
   const durationSec = frames.reduce((a, f) => a + ((f.duration || 100) / 100) / Math.max(1, customFps), 0);
