@@ -198,6 +198,32 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
   ]},
 ];
 
+// Flat, FlipAClip-style ordering for the mobile bottom tool strip
+const MOBILE_TOOLS: { id: Tool; label: string; icon: string }[] = [
+  { id: "pen", label: "Pen", icon: "✒️" },
+  { id: "pencil", label: "Pencil", icon: "✏️" },
+  { id: "brush", label: "Brush", icon: "🖌️" },
+  { id: "marker", label: "Marker", icon: "🖍️" },
+  { id: "airbrush", label: "Airbrush", icon: "💨" },
+  { id: "ink", label: "Ink Pen", icon: "🖋️" },
+  { id: "crayon", label: "Crayon", icon: "🟧" },
+  { id: "charcoal", label: "Charcoal", icon: "⚫" },
+  { id: "eraserHard", label: "Eraser", icon: "🧽" },
+  { id: "bucket", label: "Fill", icon: "🪣" },
+  { id: "eyedropper", label: "Eyedropper", icon: "💧" },
+  { id: "select", label: "Select", icon: "⬚" },
+  { id: "lasso", label: "Lasso", icon: "🪢" },
+  { id: "magicwand", label: "Magic Wand", icon: "🪄" },
+  { id: "move", label: "Move / Pan", icon: "✥" },
+  { id: "text", label: "Text", icon: "T" },
+  { id: "rect", label: "Rectangle", icon: "▭" },
+  { id: "ellipse", label: "Ellipse", icon: "◯" },
+  { id: "line", label: "Line", icon: "／" },
+  { id: "polygon", label: "Polygon", icon: "⬡" },
+  { id: "star", label: "Star", icon: "★" },
+];
+
+
 const FONT_FAMILIES = [
   "Arial", "Helvetica", "Times New Roman", "Georgia", "Courier New",
   "Comic Sans MS", "Impact", "Trebuchet MS", "Verdana", "Roboto",
@@ -434,6 +460,23 @@ export default function ToonvoEditor() {
   const isTouchLayout = bp !== "desktop";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [colorPopup, setColorPopup] = useState(false);
+  const isMobile = bp === "mobile";
+  // Mobile: transient tool-options popup above the bottom tool strip
+  const [toolPopup, setToolPopup] = useState<string | null>(null);
+  const toolPopupTimer = useRef<number | null>(null);
+  const showToolPopup = useCallback((id: string) => {
+    setToolPopup(id);
+    if (toolPopupTimer.current) window.clearTimeout(toolPopupTimer.current);
+    toolPopupTimer.current = window.setTimeout(() => setToolPopup(null), 3000);
+  }, []);
+  const [mobileMore, setMobileMore] = useState(false);
+  // Two-finger pinch-zoom / pan of the canvas view (touch)
+  const viewGestureRef = useRef<{
+    active: boolean; dist: number; cx: number; cy: number; zoom: number;
+    offX: number; offY: number; scale: number;
+  }>({ active: false, dist: 1, cx: 0, cy: 0, zoom: 1, offX: 0, offY: 0, scale: 1 });
+  const touchPtsRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+
 
   // ---- Toasts ----
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
@@ -1466,14 +1509,18 @@ export default function ToonvoEditor() {
 
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
+    // Palm rejection: ignore very large touch contacts (palm resting on screen)
+    if (e.pointerType === "touch" && (e.width > 45 || e.height > 45)) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer not active — non-fatal */ }
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+    if (isMobile) setToolPopup(null);
 
     // Track active pointers (for two-finger ruler gestures)
     {
       const p0 = eventToCanvas(e);
       pointersRef.current.set(e.pointerId, { x: p0.x, y: p0.y });
+      if (e.pointerType === "touch") touchPtsRef.current.set(e.pointerId, { x: cssP.x, y: cssP.y });
       if (pointersRef.current.size === 2 && ruler.type !== "none" && !ruler.locked) {
         const [a, b] = Array.from(pointersRef.current.values());
         gestureRef.current = {
@@ -1486,7 +1533,22 @@ export default function ToonvoEditor() {
         rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
         return;
       }
+      // Two-finger pinch-zoom / pan of the view
+      if (touchPtsRef.current.size === 2) {
+        const [a, b] = Array.from(touchPtsRef.current.values());
+        const v = viewRef.current;
+        viewGestureRef.current = {
+          active: true,
+          dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+          cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+          zoom, offX: v.offX, offY: v.offY, scale: v.scale,
+        };
+        drawingRef.current.active = false;
+        panModeRef.current = false;
+        return;
+      }
     }
+
 
     // Pan: space-hold, middle-mouse, or move tool
     const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
@@ -1654,6 +1716,28 @@ export default function ToonvoEditor() {
       const pc = eventToCanvas(e);
       pointersRef.current.set(e.pointerId, { x: pc.x, y: pc.y });
     }
+    if (touchPtsRef.current.has(e.pointerId)) touchPtsRef.current.set(e.pointerId, { x: cssP.x, y: cssP.y });
+
+    // Two-finger pinch-zoom + pan of the canvas view
+    const vg = viewGestureRef.current;
+    if (vg.active && touchPtsRef.current.size >= 2) {
+      const [a, b] = Array.from(touchPtsRef.current.values()).slice(0, 2);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const v = viewRef.current;
+      const newZoom = Math.max(0.05, Math.min(20, vg.zoom * (dist / vg.dist)));
+      const fitScale = Math.min(v.cssW / dims.w, v.cssH / dims.h);
+      const newScale = fitScale * newZoom;
+      const worldX = (vg.cx - vg.offX) / vg.scale;
+      const worldY = (vg.cy - vg.offY) / vg.scale;
+      const newOffX = mx - worldX * newScale;
+      const newOffY = my - worldY * newScale;
+      setZoom(newZoom);
+      setPan({ x: newOffX - (v.cssW - dims.w * newScale) / 2, y: newOffY - (v.cssH - dims.h * newScale) / 2 });
+      return;
+    }
+
+
 
     // Two-finger gesture: rotate + pinch-scale the ruler
     const g = gestureRef.current;
@@ -1785,9 +1869,15 @@ export default function ToonvoEditor() {
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointersRef.current.delete(e.pointerId);
+    touchPtsRef.current.delete(e.pointerId);
+    if (viewGestureRef.current.active && touchPtsRef.current.size < 2) {
+      viewGestureRef.current.active = false;
+      drawingRef.current.active = false;
+    }
     if (gestureRef.current.active && pointersRef.current.size < 2) {
       gestureRef.current = { active: false, dist: 1, angle: 0, orig: ruler };
     }
+
     if (rulerActionRef.current.mode) {
       rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
       drawingRef.current.active = false;
@@ -2517,7 +2607,7 @@ export default function ToonvoEditor() {
             <button onClick={undo} disabled={history.length === 0} title="Undo">↩</button>
             <button onClick={redo} disabled={redoStack.length === 0} title="Redo">↪</button>
             <button onClick={saveNow} title="Save">💾</button>
-            <button onClick={() => setDrawerOpen(true)} title="More">⋮</button>
+            <button onClick={() => (isMobile ? setMobileMore(v => !v) : setDrawerOpen(true))} title="More">⋮</button>
           </div>
         )}
         {(clipThumb || frameClipCount > 0) && (
@@ -2845,21 +2935,33 @@ export default function ToonvoEditor() {
           )}
 
           {/* Timeline */}
-          <div className="timeline">
+          <div className={"timeline" + (isMobile ? " tv-mobtimeline" : "")}>
             <div className="playbar">
-              <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
-              <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
-              <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
-              <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
-              <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
-              <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
-              <span className="counter">{currentFrame + 1} / {frames.length}</span>
-              <span className="counter">{fps} fps</span>
-              <div className="grow" />
-              <button onClick={() => addFrame(false)}>+ Frame</button>
-              <button onClick={() => addFrame(true)}>Duplicate</button>
-              <button onClick={() => deleteFrame(currentFrame)}>Delete</button>
+              {isMobile ? (
+                <>
+                  <button onClick={undo} disabled={history.length === 0} title="Undo" aria-label="Undo">↩</button>
+                  <button onClick={redo} disabled={redoStack.length === 0} title="Redo" aria-label="Redo">↪</button>
+                  <button onClick={() => setPlaying(p => !p)} aria-label="Play/Pause">{playing ? "❚❚" : "▶"}</button>
+                  <button onClick={() => { setPlaying(false); setCurrentFrame(0); }} aria-label="Stop">■</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
+                  <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
+                  <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
+                  <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
+                  <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
+                  <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
+                  <span className="counter">{currentFrame + 1} / {frames.length}</span>
+                  <span className="counter">{fps} fps</span>
+                  <div className="grow" />
+                  <button onClick={() => addFrame(false)}>+ Frame</button>
+                  <button onClick={() => addFrame(true)}>Duplicate</button>
+                  <button onClick={() => deleteFrame(currentFrame)}>Delete</button>
+                </>
+              )}
             </div>
+
             <div className="frames" onPointerDown={() => { focusAreaRef.current = "timeline"; }}>
               {frames.map((f, i) => (
                 <div
@@ -2891,14 +2993,89 @@ export default function ToonvoEditor() {
                   </div>
                 </div>
               ))}
-              {isTouchLayout && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
+              {isTouchLayout && !isMobile && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
             </div>
+            {isMobile && (
+              <div className="tv-mobframeright">
+                <span className="counter">{currentFrame + 1}/{frames.length}</span>
+                <button onClick={() => addFrame(false)} aria-label="Add frame">＋</button>
+              </div>
+            )}
           </div>
+
         </div>
 
         {/* Right sidebar */}
-        <aside className={"right" + (isTouchLayout && drawerOpen ? " open" : "")}>
+        <aside className={"right" + (isTouchLayout && drawerOpen ? " open" : "") + (isMobile ? " tv-drawerleft" : "")}>
+          {isTouchLayout && (
+            <div className="tv-drawerhead">
+              <strong>TOONVO</strong>
+              <button aria-label="Close menu" onClick={() => setDrawerOpen(false)}>✕</button>
+            </div>
+          )}
+          {isMobile && (
+            <>
+              <section className="panel">
+                <h3>📁 Project</h3>
+                <div className="tv-menugrid">
+                  <button onClick={() => { setDrawerOpen(false); setShowNew(true); }}>New project</button>
+                  <button onClick={async () => { setSavedList(await listProjects()); setDrawerOpen(false); setShowProjects(true); }}>Open project</button>
+                  <button onClick={() => { saveNow(); setDrawerOpen(false); }}>Save</button>
+                  <button className="primary" onClick={() => { setDrawerOpen(false); setShowExport(true); }}>Export GIF / MP4 / PNG</button>
+                  <button onClick={exportToonvo}>Download .toonvo</button>
+                  <button onClick={() => bgFileRef.current?.click()}>Import background</button>
+                  <button onClick={() => refFileRef.current?.click()} disabled={refImages.length >= 3}>Import reference</button>
+                  <button onClick={() => audioFileRef.current?.click()} disabled={audioTracks.length >= 3}>Import audio</button>
+                </div>
+              </section>
+              <section className="panel">
+                <h3>🖊 Tool options</h3>
+                <label className="tv-bigslider">Size <b>{size}px</b>
+                  <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} />
+                </label>
+                <label className="tv-bigslider">Opacity <b>{Math.round(opacity * 100)}%</b>
+                  <input type="range" min={1} max={100} value={Math.round(opacity * 100)} onChange={e => setOpacity(+e.target.value / 100)} />
+                </label>
+                <label className="tv-bigslider">Smoothing <b>{smoothing}</b>
+                  <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} />
+                </label>
+                <label className="tv-bigslider">Hardness <b>{Math.round(hardness * 100)}%</b>
+                  <input type="range" min={0} max={100} value={Math.round(hardness * 100)} onChange={e => setHardness(+e.target.value / 100)} />
+                </label>
+                <label className="tv-bigslider">Flow <b>{Math.round(flow * 100)}%</b>
+                  <input type="range" min={1} max={100} value={Math.round(flow * 100)} onChange={e => setFlow(+e.target.value / 100)} />
+                </label>
+              </section>
+              <section className="panel">
+                <h3>🎬 Canvas</h3>
+                <div className="tv-menugrid">
+                  <button className={showGrid ? "active" : ""} onClick={() => setShowGrid(g => !g)}>Grid</button>
+                  <button className={onion ? "active" : ""} onClick={() => setOnion(o => !o)}>Onion skin</button>
+                  <button className={ruler.type !== "none" ? "active" : ""} onClick={() => toggleRuler()}>Ruler</button>
+                  <button onClick={() => setSymmetry(s => s === "none" ? "h" : s === "h" ? "v" : s === "v" ? "both" : "none")}>Symmetry: {symmetry}</button>
+                  <button onClick={fitToScreen}>Fit to screen</button>
+                  <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Zoom 1:1</button>
+                </div>
+                <label className="tv-bigslider">FPS <b>{fps}</b>
+                  <input type="range" min={1} max={60} value={fps} onChange={e => setFps(+e.target.value)} />
+                </label>
+                {onion && (
+                  <>
+                    <label className="tv-bigslider">Onion before <b>{onionBefore}</b><input type="range" min={0} max={3} value={onionBefore} onChange={e => setOnionBefore(+e.target.value)} /></label>
+                    <label className="tv-bigslider">Onion after <b>{onionAfter}</b><input type="range" min={0} max={3} value={onionAfter} onChange={e => setOnionAfter(+e.target.value)} /></label>
+                  </>
+                )}
+                <div className="tv-menugrid" style={{ marginTop: 8 }}>
+                  <button onClick={() => setFrameBg("#ffffff")}>BG white</button>
+                  <button onClick={() => setFrameBg("#000000")}>BG black</button>
+                  <button onClick={() => setFrameBg(null)}>BG transparent</button>
+                  <span className="muted" style={{ alignSelf: "center", fontSize: 11 }}>{dims.w}×{dims.h}</span>
+                </div>
+              </section>
+            </>
+          )}
           {/* Color */}
+
           <section className="panel">
             <h3>Color</h3>
             <input type="color" value={color} onChange={(e) => updateColor(e.target.value)} className="bigcolor" />
@@ -3039,7 +3216,70 @@ export default function ToonvoEditor() {
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
+      {isMobile && (
+        <>
+          {/* Bottom tool strip */}
+          <nav className="tv-toolstrip" aria-label="Tools">
+            {MOBILE_TOOLS.map(t => (
+              <button
+                key={t.id}
+                className={"tv-tool" + (tool === t.id ? " active" : "")}
+                title={t.label}
+                aria-label={t.label}
+                onClick={() => { setTool(t.id); showToolPopup(t.id); }}
+                onPointerDown={(e) => startLongPress(e, () => showToolPopup(t.id))}
+                onPointerUp={cancelLongPress}
+                onPointerLeave={cancelLongPress}
+              >
+                <span className="tv-toolicon">{t.icon}</span>
+              </button>
+            ))}
+            <button className={"tv-tool" + (ruler.type !== "none" ? " active" : "")} title="Ruler" aria-label="Ruler" onClick={() => toggleRuler()}>
+              <span className="tv-toolicon">📐</span>
+            </button>
+          </nav>
+
+          {/* Tool options popup above the strip */}
+          {toolPopup && (
+            <div className="tv-toolpop">
+              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
+              <label className="tv-bigslider">Size <b>{size}px</b>
+                <input type="range" min={1} max={300} value={size} onChange={e => { setSize(+e.target.value); showToolPopup(toolPopup); }} />
+              </label>
+              <label className="tv-bigslider">Opacity <b>{Math.round(opacity * 100)}%</b>
+                <input type="range" min={1} max={100} value={Math.round(opacity * 100)} onChange={e => { setOpacity(+e.target.value / 100); showToolPopup(toolPopup); }} />
+              </label>
+              {toolPopup === "magicwand" && (
+                <label className="tv-bigslider">Tolerance <b>{wandTolerance}</b>
+                  <input type="range" min={0} max={100} value={wandTolerance} onChange={e => { setWandTolerance(+e.target.value); showToolPopup(toolPopup); }} />
+                </label>
+              )}
+              {(toolPopup === "brush" || toolPopup === "airbrush") && (
+                <label className="tv-bigslider">Hardness <b>{Math.round(hardness * 100)}%</b>
+                  <input type="range" min={0} max={100} value={Math.round(hardness * 100)} onChange={e => { setHardness(+e.target.value / 100); showToolPopup(toolPopup); }} />
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* More options menu */}
+          {mobileMore && (
+            <>
+              <div className="tv-scrim" onClick={() => setMobileMore(false)} />
+              <div className="tv-moremenu">
+                <button onClick={() => { setMobileMore(false); setShowExport(true); }}>⬆ Export (GIF / MP4 / PNG)</button>
+                <button onClick={() => { setMobileMore(false); exportToonvo(); }}>💾 Download .toonvo</button>
+                <button onClick={() => { setMobileMore(false); addFrame(true); }}>⧉ Duplicate frame</button>
+                <button onClick={() => { setMobileMore(false); deleteFrame(currentFrame); }}>🗑 Delete frame</button>
+                <button onClick={() => { setMobileMore(false); fitToScreen(); }}>⛶ Fit to screen</button>
+                <button onClick={() => { setMobileMore(false); setDrawerOpen(true); }}>☰ Full menu</button>
+              </div>
+            </>
+          )}
+        </>
+      )}
       {isTouchLayout && (
+
         <>
           <button className="tv-fab" style={{ background: color }} title="Color" aria-label="Color picker" onClick={() => setColorPopup(v => !v)} />
           {colorPopup && (
