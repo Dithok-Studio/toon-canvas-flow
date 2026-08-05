@@ -374,7 +374,10 @@ input[type="text"], input[type="number"], input[type="color"], select {
   .tv-mobtimeline .frames { flex: 1; min-width: 0; padding: 0 4px; align-items: center; }
   .tv-mobtimeline .frameitem { min-width: 46px; }
   .tv-mobtimeline .thumb { width: 44px; height: 30px; }
+  .tv-mobtimeline .finfo { font-size: 0; justify-content: center; }
   .tv-mobtimeline .finfo input { display: none; }
+  .tv-mobtimeline .finfo span { font-size: 10px; }
+
   .tv-mobframeright { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
   .tv-mobframeright .counter { font-size: 11px; color: var(--muted); }
   .tv-mobframeright button { width: 44px; height: 44px; font-size: 18px; padding: 0; }
