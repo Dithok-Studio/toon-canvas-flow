@@ -3216,7 +3216,70 @@ export default function ToonvoEditor() {
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
+      {isMobile && (
+        <>
+          {/* Bottom tool strip */}
+          <nav className="tv-toolstrip" aria-label="Tools">
+            {MOBILE_TOOLS.map(t => (
+              <button
+                key={t.id}
+                className={"tv-tool" + (tool === t.id ? " active" : "")}
+                title={t.label}
+                aria-label={t.label}
+                onClick={() => { setTool(t.id); showToolPopup(t.id); }}
+                onPointerDown={(e) => startLongPress(e, () => showToolPopup(t.id))}
+                onPointerUp={cancelLongPress}
+                onPointerLeave={cancelLongPress}
+              >
+                <span className="tv-toolicon">{t.icon}</span>
+              </button>
+            ))}
+            <button className={"tv-tool" + (ruler.type !== "none" ? " active" : "")} title="Ruler" aria-label="Ruler" onClick={() => toggleRuler()}>
+              <span className="tv-toolicon">📐</span>
+            </button>
+          </nav>
+
+          {/* Tool options popup above the strip */}
+          {toolPopup && (
+            <div className="tv-toolpop">
+              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
+              <label className="tv-bigslider">Size <b>{size}px</b>
+                <input type="range" min={1} max={300} value={size} onChange={e => { setSize(+e.target.value); showToolPopup(toolPopup); }} />
+              </label>
+              <label className="tv-bigslider">Opacity <b>{Math.round(opacity * 100)}%</b>
+                <input type="range" min={1} max={100} value={Math.round(opacity * 100)} onChange={e => { setOpacity(+e.target.value / 100); showToolPopup(toolPopup); }} />
+              </label>
+              {toolPopup === "magicwand" && (
+                <label className="tv-bigslider">Tolerance <b>{wandTolerance}</b>
+                  <input type="range" min={0} max={100} value={wandTolerance} onChange={e => { setWandTolerance(+e.target.value); showToolPopup(toolPopup); }} />
+                </label>
+              )}
+              {(toolPopup === "brush" || toolPopup === "airbrush") && (
+                <label className="tv-bigslider">Hardness <b>{Math.round(hardness * 100)}%</b>
+                  <input type="range" min={0} max={100} value={Math.round(hardness * 100)} onChange={e => { setHardness(+e.target.value / 100); showToolPopup(toolPopup); }} />
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* More options menu */}
+          {mobileMore && (
+            <>
+              <div className="tv-scrim" onClick={() => setMobileMore(false)} />
+              <div className="tv-moremenu">
+                <button onClick={() => { setMobileMore(false); setShowExport(true); }}>⬆ Export (GIF / MP4 / PNG)</button>
+                <button onClick={() => { setMobileMore(false); exportToonvo(); }}>💾 Download .toonvo</button>
+                <button onClick={() => { setMobileMore(false); addFrame(true); }}>⧉ Duplicate frame</button>
+                <button onClick={() => { setMobileMore(false); deleteFrame(currentFrame); }}>🗑 Delete frame</button>
+                <button onClick={() => { setMobileMore(false); fitToScreen(); }}>⛶ Fit to screen</button>
+                <button onClick={() => { setMobileMore(false); setDrawerOpen(true); }}>☰ Full menu</button>
+              </div>
+            </>
+          )}
+        </>
+      )}
       {isTouchLayout && (
+
         <>
           <button className="tv-fab" style={{ background: color }} title="Color" aria-label="Color picker" onClick={() => setColorPopup(v => !v)} />
           {colorPopup && (
