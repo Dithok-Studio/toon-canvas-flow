@@ -2935,21 +2935,33 @@ export default function ToonvoEditor() {
           )}
 
           {/* Timeline */}
-          <div className="timeline">
+          <div className={"timeline" + (isMobile ? " tv-mobtimeline" : "")}>
             <div className="playbar">
-              <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
-              <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
-              <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
-              <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
-              <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
-              <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
-              <span className="counter">{currentFrame + 1} / {frames.length}</span>
-              <span className="counter">{fps} fps</span>
-              <div className="grow" />
-              <button onClick={() => addFrame(false)}>+ Frame</button>
-              <button onClick={() => addFrame(true)}>Duplicate</button>
-              <button onClick={() => deleteFrame(currentFrame)}>Delete</button>
+              {isMobile ? (
+                <>
+                  <button onClick={undo} disabled={history.length === 0} title="Undo" aria-label="Undo">↩</button>
+                  <button onClick={redo} disabled={redoStack.length === 0} title="Redo" aria-label="Redo">↪</button>
+                  <button onClick={() => setPlaying(p => !p)} aria-label="Play/Pause">{playing ? "❚❚" : "▶"}</button>
+                  <button onClick={() => { setPlaying(false); setCurrentFrame(0); }} aria-label="Stop">■</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={undo} disabled={history.length === 0} title="Undo (Ctrl+Z)" style={{ opacity: history.length === 0 ? 0.4 : 1 }}>↶ Undo{history.length > 0 ? ` ${history.length}` : ""}</button>
+                  <button onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)" style={{ opacity: redoStack.length === 0 ? 0.4 : 1 }}>↷ Redo{redoStack.length > 0 ? ` ${redoStack.length}` : ""}</button>
+                  <span style={{ width: 1, height: 20, background: "var(--line)", margin: "0 4px" }} />
+                  <button onClick={() => setPlaying(p => !p)} title="Play/Pause (Space)">{playing ? "❚❚" : "▶"}</button>
+                  <button onClick={() => { setPlaying(false); setCurrentFrame(0); }}>■</button>
+                  <button className={loop ? "active" : ""} onClick={() => setLoop(l => !l)}>↻</button>
+                  <span className="counter">{currentFrame + 1} / {frames.length}</span>
+                  <span className="counter">{fps} fps</span>
+                  <div className="grow" />
+                  <button onClick={() => addFrame(false)}>+ Frame</button>
+                  <button onClick={() => addFrame(true)}>Duplicate</button>
+                  <button onClick={() => deleteFrame(currentFrame)}>Delete</button>
+                </>
+              )}
             </div>
+
             <div className="frames" onPointerDown={() => { focusAreaRef.current = "timeline"; }}>
               {frames.map((f, i) => (
                 <div
