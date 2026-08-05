@@ -2607,7 +2607,7 @@ export default function ToonvoEditor() {
             <button onClick={undo} disabled={history.length === 0} title="Undo">↩</button>
             <button onClick={redo} disabled={redoStack.length === 0} title="Redo">↪</button>
             <button onClick={saveNow} title="Save">💾</button>
-            <button onClick={() => setDrawerOpen(true)} title="More">⋮</button>
+            <button onClick={() => (isMobile ? setMobileMore(v => !v) : setDrawerOpen(true))} title="More">⋮</button>
           </div>
         )}
         {(clipThumb || frameClipCount > 0) && (
