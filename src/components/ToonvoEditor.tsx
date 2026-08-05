@@ -198,6 +198,32 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
   ]},
 ];
 
+// Flat, FlipAClip-style ordering for the mobile bottom tool strip
+const MOBILE_TOOLS: { id: Tool; label: string; icon: string }[] = [
+  { id: "pen", label: "Pen", icon: "✒️" },
+  { id: "pencil", label: "Pencil", icon: "✏️" },
+  { id: "brush", label: "Brush", icon: "🖌️" },
+  { id: "marker", label: "Marker", icon: "🖍️" },
+  { id: "airbrush", label: "Airbrush", icon: "💨" },
+  { id: "ink", label: "Ink Pen", icon: "🖋️" },
+  { id: "crayon", label: "Crayon", icon: "🟧" },
+  { id: "charcoal", label: "Charcoal", icon: "⚫" },
+  { id: "eraserHard", label: "Eraser", icon: "🧽" },
+  { id: "bucket", label: "Fill", icon: "🪣" },
+  { id: "eyedropper", label: "Eyedropper", icon: "💧" },
+  { id: "select", label: "Select", icon: "⬚" },
+  { id: "lasso", label: "Lasso", icon: "🪢" },
+  { id: "magicwand", label: "Magic Wand", icon: "🪄" },
+  { id: "move", label: "Move / Pan", icon: "✥" },
+  { id: "text", label: "Text", icon: "T" },
+  { id: "rect", label: "Rectangle", icon: "▭" },
+  { id: "ellipse", label: "Ellipse", icon: "◯" },
+  { id: "line", label: "Line", icon: "／" },
+  { id: "polygon", label: "Polygon", icon: "⬡" },
+  { id: "star", label: "Star", icon: "★" },
+];
+
+
 const FONT_FAMILIES = [
   "Arial", "Helvetica", "Times New Roman", "Georgia", "Courier New",
   "Comic Sans MS", "Impact", "Trebuchet MS", "Verdana", "Roboto",
