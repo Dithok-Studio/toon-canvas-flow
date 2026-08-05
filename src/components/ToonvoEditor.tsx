@@ -1483,14 +1483,18 @@ export default function ToonvoEditor() {
 
   // ------------- Pointer handlers -------------
   const onPointerDown = (e: React.PointerEvent) => {
+    // Palm rejection: ignore very large touch contacts (palm resting on screen)
+    if (e.pointerType === "touch" && (e.width > 45 || e.height > 45)) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer not active — non-fatal */ }
     const cssP = eventToCss(e);
     setCursorPos({ x: cssP.x, y: cssP.y, visible: true });
+    if (isMobile) setToolPopup(null);
 
     // Track active pointers (for two-finger ruler gestures)
     {
       const p0 = eventToCanvas(e);
       pointersRef.current.set(e.pointerId, { x: p0.x, y: p0.y });
+      if (e.pointerType === "touch") touchPtsRef.current.set(e.pointerId, { x: cssP.x, y: cssP.y });
       if (pointersRef.current.size === 2 && ruler.type !== "none" && !ruler.locked) {
         const [a, b] = Array.from(pointersRef.current.values());
         gestureRef.current = {
@@ -1503,7 +1507,22 @@ export default function ToonvoEditor() {
         rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
         return;
       }
+      // Two-finger pinch-zoom / pan of the view
+      if (touchPtsRef.current.size === 2) {
+        const [a, b] = Array.from(touchPtsRef.current.values());
+        const v = viewRef.current;
+        viewGestureRef.current = {
+          active: true,
+          dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+          cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+          zoom, offX: v.offX, offY: v.offY, scale: v.scale,
+        };
+        drawingRef.current.active = false;
+        panModeRef.current = false;
+        return;
+      }
     }
+
 
     // Pan: space-hold, middle-mouse, or move tool
     const isPan = spaceDownRef.current || e.button === 1 || tool === "move";
