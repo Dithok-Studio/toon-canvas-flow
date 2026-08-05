@@ -1843,9 +1843,15 @@ export default function ToonvoEditor() {
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointersRef.current.delete(e.pointerId);
+    touchPtsRef.current.delete(e.pointerId);
+    if (viewGestureRef.current.active && touchPtsRef.current.size < 2) {
+      viewGestureRef.current.active = false;
+      drawingRef.current.active = false;
+    }
     if (gestureRef.current.active && pointersRef.current.size < 2) {
       gestureRef.current = { active: false, dist: 1, angle: 0, orig: ruler };
     }
+
     if (rulerActionRef.current.mode) {
       rulerActionRef.current = { mode: null, startX: 0, startY: 0, orig: ruler };
       drawingRef.current.active = false;
