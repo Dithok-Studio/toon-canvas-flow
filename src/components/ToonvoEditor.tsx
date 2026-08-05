@@ -2993,9 +2993,16 @@ export default function ToonvoEditor() {
                   </div>
                 </div>
               ))}
-              {isTouchLayout && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
+              {isTouchLayout && !isMobile && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
             </div>
+            {isMobile && (
+              <div className="tv-mobframeright">
+                <span className="counter">{currentFrame + 1}/{frames.length}</span>
+                <button onClick={() => addFrame(false)} aria-label="Add frame">＋</button>
+              </div>
+            )}
           </div>
+
         </div>
 
         {/* Right sidebar */}
