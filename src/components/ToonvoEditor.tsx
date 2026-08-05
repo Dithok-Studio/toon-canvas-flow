@@ -3006,8 +3006,76 @@ export default function ToonvoEditor() {
         </div>
 
         {/* Right sidebar */}
-        <aside className={"right" + (isTouchLayout && drawerOpen ? " open" : "")}>
+        <aside className={"right" + (isTouchLayout && drawerOpen ? " open" : "") + (isMobile ? " tv-drawerleft" : "")}>
+          {isTouchLayout && (
+            <div className="tv-drawerhead">
+              <strong>TOONVO</strong>
+              <button aria-label="Close menu" onClick={() => setDrawerOpen(false)}>✕</button>
+            </div>
+          )}
+          {isMobile && (
+            <>
+              <section className="panel">
+                <h3>📁 Project</h3>
+                <div className="tv-menugrid">
+                  <button onClick={() => { setDrawerOpen(false); setShowNew(true); }}>New project</button>
+                  <button onClick={async () => { setSavedList(await listProjects()); setDrawerOpen(false); setShowProjects(true); }}>Open project</button>
+                  <button onClick={() => { saveNow(); setDrawerOpen(false); }}>Save</button>
+                  <button className="primary" onClick={() => { setDrawerOpen(false); setShowExport(true); }}>Export GIF / MP4 / PNG</button>
+                  <button onClick={exportToonvo}>Download .toonvo</button>
+                  <button onClick={() => bgFileRef.current?.click()}>Import background</button>
+                  <button onClick={() => refFileRef.current?.click()} disabled={refImages.length >= 3}>Import reference</button>
+                  <button onClick={() => audioFileRef.current?.click()} disabled={audioTracks.length >= 3}>Import audio</button>
+                </div>
+              </section>
+              <section className="panel">
+                <h3>🖊 Tool options</h3>
+                <label className="tv-bigslider">Size <b>{size}px</b>
+                  <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} />
+                </label>
+                <label className="tv-bigslider">Opacity <b>{Math.round(opacity * 100)}%</b>
+                  <input type="range" min={1} max={100} value={Math.round(opacity * 100)} onChange={e => setOpacity(+e.target.value / 100)} />
+                </label>
+                <label className="tv-bigslider">Smoothing <b>{smoothing}</b>
+                  <input type="range" min={0} max={10} value={smoothing} onChange={e => setSmoothing(+e.target.value)} />
+                </label>
+                <label className="tv-bigslider">Hardness <b>{Math.round(hardness * 100)}%</b>
+                  <input type="range" min={0} max={100} value={Math.round(hardness * 100)} onChange={e => setHardness(+e.target.value / 100)} />
+                </label>
+                <label className="tv-bigslider">Flow <b>{Math.round(flow * 100)}%</b>
+                  <input type="range" min={1} max={100} value={Math.round(flow * 100)} onChange={e => setFlow(+e.target.value / 100)} />
+                </label>
+              </section>
+              <section className="panel">
+                <h3>🎬 Canvas</h3>
+                <div className="tv-menugrid">
+                  <button className={showGrid ? "active" : ""} onClick={() => setShowGrid(g => !g)}>Grid</button>
+                  <button className={onion ? "active" : ""} onClick={() => setOnion(o => !o)}>Onion skin</button>
+                  <button className={ruler.type !== "none" ? "active" : ""} onClick={() => toggleRuler()}>Ruler</button>
+                  <button onClick={() => setSymmetry(s => s === "none" ? "h" : s === "h" ? "v" : s === "v" ? "both" : "none")}>Symmetry: {symmetry}</button>
+                  <button onClick={fitToScreen}>Fit to screen</button>
+                  <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Zoom 1:1</button>
+                </div>
+                <label className="tv-bigslider">FPS <b>{fps}</b>
+                  <input type="range" min={1} max={60} value={fps} onChange={e => setFps(+e.target.value)} />
+                </label>
+                {onion && (
+                  <>
+                    <label className="tv-bigslider">Onion before <b>{onionBefore}</b><input type="range" min={0} max={3} value={onionBefore} onChange={e => setOnionBefore(+e.target.value)} /></label>
+                    <label className="tv-bigslider">Onion after <b>{onionAfter}</b><input type="range" min={0} max={3} value={onionAfter} onChange={e => setOnionAfter(+e.target.value)} /></label>
+                  </>
+                )}
+                <div className="tv-menugrid" style={{ marginTop: 8 }}>
+                  <button onClick={() => setFrameBg("#ffffff")}>BG white</button>
+                  <button onClick={() => setFrameBg("#000000")}>BG black</button>
+                  <button onClick={() => setFrameBg(null)}>BG transparent</button>
+                  <span className="muted" style={{ alignSelf: "center", fontSize: 11 }}>{dims.w}×{dims.h}</span>
+                </div>
+              </section>
+            </>
+          )}
           {/* Color */}
+
           <section className="panel">
             <h3>Color</h3>
             <input type="color" value={color} onChange={(e) => updateColor(e.target.value)} className="bigcolor" />
