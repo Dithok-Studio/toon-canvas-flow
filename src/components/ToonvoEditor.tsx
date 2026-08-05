@@ -1690,6 +1690,28 @@ export default function ToonvoEditor() {
       const pc = eventToCanvas(e);
       pointersRef.current.set(e.pointerId, { x: pc.x, y: pc.y });
     }
+    if (touchPtsRef.current.has(e.pointerId)) touchPtsRef.current.set(e.pointerId, { x: cssP.x, y: cssP.y });
+
+    // Two-finger pinch-zoom + pan of the canvas view
+    const vg = viewGestureRef.current;
+    if (vg.active && touchPtsRef.current.size >= 2) {
+      const [a, b] = Array.from(touchPtsRef.current.values()).slice(0, 2);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const v = viewRef.current;
+      const newZoom = Math.max(0.05, Math.min(20, vg.zoom * (dist / vg.dist)));
+      const fitScale = Math.min(v.cssW / dims.w, v.cssH / dims.h);
+      const newScale = fitScale * newZoom;
+      const worldX = (vg.cx - vg.offX) / vg.scale;
+      const worldY = (vg.cy - vg.offY) / vg.scale;
+      const newOffX = mx - worldX * newScale;
+      const newOffY = my - worldY * newScale;
+      setZoom(newZoom);
+      setPan({ x: newOffX - (v.cssW - dims.w * newScale) / 2, y: newOffY - (v.cssH - dims.h * newScale) / 2 });
+      return;
+    }
+
+
 
     // Two-finger gesture: rotate + pinch-scale the ruler
     const g = gestureRef.current;
