@@ -434,6 +434,23 @@ export default function ToonvoEditor() {
   const isTouchLayout = bp !== "desktop";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [colorPopup, setColorPopup] = useState(false);
+  const isMobile = bp === "mobile";
+  // Mobile: transient tool-options popup above the bottom tool strip
+  const [toolPopup, setToolPopup] = useState<string | null>(null);
+  const toolPopupTimer = useRef<number | null>(null);
+  const showToolPopup = useCallback((id: string) => {
+    setToolPopup(id);
+    if (toolPopupTimer.current) window.clearTimeout(toolPopupTimer.current);
+    toolPopupTimer.current = window.setTimeout(() => setToolPopup(null), 3000);
+  }, []);
+  const [mobileMore, setMobileMore] = useState(false);
+  // Two-finger pinch-zoom / pan of the canvas view (touch)
+  const viewGestureRef = useRef<{
+    active: boolean; dist: number; cx: number; cy: number; zoom: number;
+    offX: number; offY: number; scale: number;
+  }>({ active: false, dist: 1, cx: 0, cy: 0, zoom: 1, offX: 0, offY: 0, scale: 1 });
+  const touchPtsRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+
 
   // ---- Toasts ----
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
