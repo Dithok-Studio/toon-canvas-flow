@@ -2937,9 +2937,9 @@ export default function ToonvoEditor() {
           )}
 
           {/* Timeline */}
-          <div className={"timeline" + (isMobile ? " tv-mobtimeline" : "")}>
+          <div className={"timeline" + (isTouchLayout ? " tv-mobtimeline" : "")}>
             <div className="playbar">
-              {isMobile ? (
+              {isTouchLayout ? (
                 <>
                   <button onClick={undo} disabled={history.length === 0} title="Undo" aria-label="Undo">↩</button>
                   <button onClick={redo} disabled={redoStack.length === 0} title="Redo" aria-label="Redo">↪</button>
@@ -2995,9 +2995,9 @@ export default function ToonvoEditor() {
                   </div>
                 </div>
               ))}
-              {isTouchLayout && !isMobile && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
+
             </div>
-            {isMobile && (
+            {isTouchLayout && (
               <div className="tv-mobframeright">
                 <span className="counter">{currentFrame + 1}/{frames.length}</span>
                 <button onClick={() => addFrame(false)} aria-label="Add frame">＋</button>
@@ -3218,7 +3218,7 @@ export default function ToonvoEditor() {
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
-      {isMobile && (
+      {isTouchLayout && (
         <>
           {/* Bottom tool strip */}
           <nav className="tv-toolstrip" aria-label="Tools">
