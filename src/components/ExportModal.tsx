@@ -8,11 +8,14 @@ import {
   estimateSize,
   humanSize,
   downloadBlob,
+  shareOrDownload,
   pickMime,
   type ExportFrameLike,
   type ExportAudioLike,
 } from "@/lib/toonvo-video";
 import { encodeGif } from "@/lib/toonvo-gif";
+import { useBreakpoint } from "@/hooks/use-breakpoint";
+
 import {
   getPlanTier,
   setPlanTier,
@@ -38,7 +41,10 @@ interface Props {
 }
 
 export default function ExportModal({ frames, dims, fps, projectName, audio, onClose }: Props) {
+  const bp = useBreakpoint();
+  const canShare = bp !== "desktop" && typeof navigator !== "undefined" && typeof navigator.share === "function";
   const [tab, setTab] = useState<Tab>("mp4");
+
   const [plan, setPlan] = useState<PlanTier>("free");
   const [res, setRes] = useState<Res>(720);
   const [customFps, setCustomFps] = useState<number>(fps);
@@ -103,11 +109,26 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
 
   useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
 
+  const pngBatchRef = useRef<File[] | null>(null);
+
+  const sharePngBatch = async (files: File[]) => {
+    const data: ShareData = { files, title: "My TOONVO Animation", text: "Made with TOONVO" };
+    try {
+      if (navigator.canShare?.(data)) { await navigator.share(data); return; }
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
+    }
+    for (const f of files) downloadBlob(f, f.name);
+  };
+
   const finish = (blob: Blob, name: string, fallback = false) => {
+
     const url = URL.createObjectURL(blob);
     setResult({ blob, name, url, fallback });
-    downloadBlob(blob, name); // auto-download
+    // Mobile/tablet: open the native share sheet; desktop: direct download.
+    void shareOrDownload(blob, name, { preferShare: canShare });
   };
+
 
   // ---------- MP4 ----------
   const runMp4 = async () => {
@@ -203,12 +224,16 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     const ctx = c.getContext("2d")!;
     let last: Blob | null = null;
     let lastName = "";
+    const batch: File[] = [];
     for (const i of list) {
       drawFrame(ctx, frames[i], dims.w, dims.h);
       if (wmConfig) drawWatermark(ctx, dims.w, dims.h, wmConfig);
       const blob: Blob = await new Promise(r => c.toBlob(b => r(b!), "image/png")!);
       lastName = `${baseName}-frame-${String(i + 1).padStart(3, "0")}.png`;
-      if (pngAll) downloadBlob(blob, lastName);
+      if (pngAll) {
+        if (canShare) batch.push(new File([blob], lastName, { type: "image/png" }));
+        else downloadBlob(blob, lastName);
+      }
       last = blob;
       setProgress({ i: i + 1, n: list.length });
       await new Promise(r => setTimeout(r, 0));
@@ -217,9 +242,12 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
       if (pngAll) {
         const url = URL.createObjectURL(last);
         setResult({ blob: last, name: `${list.length} PNG files`, url, fallback: false });
-      } else finish(last, lastName);
+        pngBatchRef.current = batch.length ? batch : null;
+        if (batch.length) await sharePngBatch(batch);
+      } else { pngBatchRef.current = null; finish(last, lastName); }
     }
     setBusy(false);
+
   };
 
   const run = () => {
@@ -447,9 +475,15 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
           <div className="tv-done">
             <div style={{ fontWeight: 700 }}>✅ {tab === "mp4" ? (result.fallback ? "Video" : "MP4") : tab.toUpperCase()} Ready!</div>
             <div className="tv-hint">{result.name} • {humanSize(result.blob.size)}</div>
-            <button className="primary" onClick={() => downloadBlob(result.blob, result.name)}>
-              Download {tab === "mp4" ? (result.fallback ? "video" : "MP4") : tab.toUpperCase()}
+            <button className="primary" onClick={() => {
+              const batch = pngBatchRef.current;
+              if (canShare && batch) { void sharePngBatch(batch); return; }
+              if (canShare) { void shareOrDownload(result.blob, result.name, { preferShare: true }); return; }
+              downloadBlob(result.blob, result.name);
+            }}>
+              {canShare ? "Share" : "Download"} {tab === "mp4" ? (result.fallback ? "video" : "MP4") : tab.toUpperCase()}
             </button>
+
           </div>
         )}
 
