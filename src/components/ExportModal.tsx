@@ -109,7 +109,20 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
 
   useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
 
+  const pngBatchRef = useRef<File[] | null>(null);
+
+  const sharePngBatch = async (files: File[]) => {
+    const data: ShareData = { files, title: "My TOONVO Animation", text: "Made with TOONVO" };
+    try {
+      if (navigator.canShare?.(data)) { await navigator.share(data); return; }
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
+    }
+    for (const f of files) downloadBlob(f, f.name);
+  };
+
   const finish = (blob: Blob, name: string, fallback = false) => {
+
     const url = URL.createObjectURL(blob);
     setResult({ blob, name, url, fallback });
     // Mobile/tablet: open the native share sheet; desktop: direct download.
