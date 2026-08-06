@@ -41,7 +41,10 @@ interface Props {
 }
 
 export default function ExportModal({ frames, dims, fps, projectName, audio, onClose }: Props) {
+  const bp = useBreakpoint();
+  const canShare = bp !== "desktop" && typeof navigator !== "undefined" && typeof navigator.share === "function";
   const [tab, setTab] = useState<Tab>("mp4");
+
   const [plan, setPlan] = useState<PlanTier>("free");
   const [res, setRes] = useState<Res>(720);
   const [customFps, setCustomFps] = useState<number>(fps);
