@@ -109,8 +109,10 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
   const finish = (blob: Blob, name: string, fallback = false) => {
     const url = URL.createObjectURL(blob);
     setResult({ blob, name, url, fallback });
-    downloadBlob(blob, name); // auto-download
+    // Mobile/tablet: open the native share sheet; desktop: direct download.
+    void shareOrDownload(blob, name, { preferShare: canShare });
   };
+
 
   // ---------- MP4 ----------
   const runMp4 = async () => {
