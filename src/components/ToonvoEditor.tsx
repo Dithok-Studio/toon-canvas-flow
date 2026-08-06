@@ -461,6 +461,7 @@ export default function ToonvoEditor() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [colorPopup, setColorPopup] = useState(false);
   const isMobile = bp === "mobile";
+  const isTablet = bp === "tablet";
   // Mobile: transient tool-options popup above the bottom tool strip
   const [toolPopup, setToolPopup] = useState<string | null>(null);
   const toolPopupTimer = useRef<number | null>(null);
@@ -2607,7 +2608,8 @@ export default function ToonvoEditor() {
             <button onClick={undo} disabled={history.length === 0} title="Undo">↩</button>
             <button onClick={redo} disabled={redoStack.length === 0} title="Redo">↪</button>
             <button onClick={saveNow} title="Save">💾</button>
-            <button onClick={() => (isMobile ? setMobileMore(v => !v) : setDrawerOpen(true))} title="More">⋮</button>
+            {isTablet && <button className="primary" onClick={() => setShowExport(true)} title="Export">⬆ Export</button>}
+            <button onClick={() => setMobileMore(v => !v)} title="More">⋮</button>
           </div>
         )}
         {(clipThumb || frameClipCount > 0) && (
@@ -2737,7 +2739,7 @@ export default function ToonvoEditor() {
                   <button
                     key={t.id}
                     className={"toolbtn " + (tool === t.id ? "active" : "")}
-                    onClick={() => setTool(t.id)}
+                    onClick={() => { setTool(t.id); if (isTablet) showToolPopup(t.id); }}
                     title={t.label + (t.key ? ` (${t.key})` : "")}
                   >
                     <span className="ticon">{t.icon}</span>
@@ -2935,9 +2937,9 @@ export default function ToonvoEditor() {
           )}
 
           {/* Timeline */}
-          <div className={"timeline" + (isMobile ? " tv-mobtimeline" : "")}>
+          <div className={"timeline" + (isTouchLayout ? " tv-mobtimeline" : "")}>
             <div className="playbar">
-              {isMobile ? (
+              {isTouchLayout ? (
                 <>
                   <button onClick={undo} disabled={history.length === 0} title="Undo" aria-label="Undo">↩</button>
                   <button onClick={redo} disabled={redoStack.length === 0} title="Redo" aria-label="Redo">↪</button>
@@ -2993,9 +2995,9 @@ export default function ToonvoEditor() {
                   </div>
                 </div>
               ))}
-              {isTouchLayout && !isMobile && <button className="tv-addframe" onClick={() => addFrame(false)} title="Add frame">＋</button>}
+
             </div>
-            {isMobile && (
+            {isTouchLayout && (
               <div className="tv-mobframeright">
                 <span className="counter">{currentFrame + 1}/{frames.length}</span>
                 <button onClick={() => addFrame(false)} aria-label="Add frame">＋</button>
@@ -3216,9 +3218,10 @@ export default function ToonvoEditor() {
 
       {/* ---------- Mobile / tablet chrome ---------- */}
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
-      {isMobile && (
+      {isTouchLayout && (
         <>
-          {/* Bottom tool strip */}
+          {/* Bottom tool strip (mobile only; tablet keeps the narrow left rail) */}
+          {isMobile && (
           <nav className="tv-toolstrip" aria-label="Tools">
             {MOBILE_TOOLS.map(t => (
               <button
@@ -3238,11 +3241,12 @@ export default function ToonvoEditor() {
               <span className="tv-toolicon">📐</span>
             </button>
           </nav>
+          )}
 
           {/* Tool options popup above the strip */}
           {toolPopup && (
             <div className="tv-toolpop">
-              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
+              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
               <label className="tv-bigslider">Size <b>{size}px</b>
                 <input type="range" min={1} max={300} value={size} onChange={e => { setSize(+e.target.value); showToolPopup(toolPopup); }} />
               </label>
