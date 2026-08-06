@@ -475,9 +475,15 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
           <div className="tv-done">
             <div style={{ fontWeight: 700 }}>✅ {tab === "mp4" ? (result.fallback ? "Video" : "MP4") : tab.toUpperCase()} Ready!</div>
             <div className="tv-hint">{result.name} • {humanSize(result.blob.size)}</div>
-            <button className="primary" onClick={() => downloadBlob(result.blob, result.name)}>
-              Download {tab === "mp4" ? (result.fallback ? "video" : "MP4") : tab.toUpperCase()}
+            <button className="primary" onClick={() => {
+              const batch = pngBatchRef.current;
+              if (canShare && batch) { void sharePngBatch(batch); return; }
+              if (canShare) { void shareOrDownload(result.blob, result.name, { preferShare: true }); return; }
+              downloadBlob(result.blob, result.name);
+            }}>
+              {canShare ? "Share" : "Download"} {tab === "mp4" ? (result.fallback ? "video" : "MP4") : tab.toUpperCase()}
             </button>
+
           </div>
         )}
 
