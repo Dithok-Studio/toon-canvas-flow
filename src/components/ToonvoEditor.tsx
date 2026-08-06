@@ -3220,7 +3220,8 @@ export default function ToonvoEditor() {
       {isTouchLayout && drawerOpen && <div className="tv-scrim" onClick={() => setDrawerOpen(false)} />}
       {isTouchLayout && (
         <>
-          {/* Bottom tool strip */}
+          {/* Bottom tool strip (mobile only; tablet keeps the narrow left rail) */}
+          {isMobile && (
           <nav className="tv-toolstrip" aria-label="Tools">
             {MOBILE_TOOLS.map(t => (
               <button
@@ -3240,11 +3241,12 @@ export default function ToonvoEditor() {
               <span className="tv-toolicon">📐</span>
             </button>
           </nav>
+          )}
 
           {/* Tool options popup above the strip */}
           {toolPopup && (
             <div className="tv-toolpop">
-              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
+              <div className="tv-toolpopname">{MOBILE_TOOLS.find(t => t.id === toolPopup)?.label ?? TOOL_GROUPS.flatMap(g => g.tools).find(t => t.id === toolPopup)?.label ?? toolPopup}</div>
               <label className="tv-bigslider">Size <b>{size}px</b>
                 <input type="range" min={1} max={300} value={size} onChange={e => { setSize(+e.target.value); showToolPopup(toolPopup); }} />
               </label>
