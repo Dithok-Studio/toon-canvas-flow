@@ -342,6 +342,77 @@ input[type="text"], input[type="number"], input[type="color"], select {
   }
   .right.open { transform: translateX(0); }
 }
+
+/* ---------- Tablet only (768px – 1023px) ---------- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  html, body { overscroll-behavior: none; }
+
+  /* Top bar: logo + undo/redo/save/export/more */
+  .topbar { height: 48px; padding: 0 10px; gap: 10px; }
+  .topbar .filemenu, .topbar .toolopts, .topbar .topright { display: none !important; }
+  .tv-hamburger { width: 44px; height: 40px; font-size: 18px; }
+  .tv-mobtop { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .tv-mobtop button { min-width: 44px; height: 40px; font-size: 15px; padding: 0 10px; }
+
+  /* Narrow left rail: icons only */
+  .main { grid-template-columns: 64px 1fr; }
+  .left { padding: 2px; overflow-x: hidden; }
+  .left .grouplabel { display: none; }
+  .toolgroup { margin-bottom: 6px; }
+  .grouptools { grid-template-columns: 1fr; gap: 2px; }
+  .toolbtn { height: 44px; border-radius: 8px; }
+  .toolbtn .ticon { font-size: 18px; }
+  .toolbtn .tlabel { display: none; }
+  .left .onionopts { display: none; }
+  .statusbar { display: none !important; }
+
+  /* Canvas gets everything above the timeline strip */
+  .center { padding-bottom: 72px; }
+  .display { touch-action: none; }
+
+  /* Bottom timeline strip (same behaviour as mobile) */
+  .timeline.tv-mobtimeline {
+    position: fixed; left: 64px; right: 0; bottom: 0; height: 68px; max-height: 68px;
+    flex-direction: row; align-items: center; gap: 6px;
+    background: #1a1a2e; border-top: 1px solid var(--line); z-index: 150; padding: 0 6px;
+  }
+  .tv-mobtimeline .playbar { border-bottom: none; padding: 0; gap: 4px; flex: 0 0 auto; }
+  .tv-mobtimeline .playbar button { width: 44px; height: 44px; padding: 0; font-size: 16px; }
+  .tv-mobtimeline .frames { flex: 1; min-width: 0; padding: 0 6px; align-items: center; }
+  .tv-mobtimeline .frameitem { min-width: 52px; }
+  .tv-mobtimeline .thumb { width: 50px; height: 34px; }
+  .tv-mobtimeline .finfo input { display: none; }
+  .tv-mobframeright { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+  .tv-mobframeright .counter { font-size: 12px; color: var(--muted); }
+  .tv-mobframeright button { width: 44px; height: 44px; font-size: 18px; padding: 0; }
+
+  /* Floating tool-options panel next to the rail */
+  .tv-toolpop {
+    position: fixed; left: 72px; bottom: 84px; width: 300px; z-index: 205;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
+    padding: 12px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55);
+  }
+  .tv-toolpopname { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+  /* More menu */
+  .tv-moremenu {
+    position: fixed; top: 52px; right: 10px; z-index: 260; min-width: 250px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 6px; display: flex; flex-direction: column; gap: 4px;
+    box-shadow: 0 16px 44px rgba(0,0,0,.6);
+  }
+  .tv-moremenu button { text-align: left; min-height: 44px; }
+
+  /* Floating panels drawer (layers / effects / color) */
+  .right { padding-bottom: 84px; }
+
+  /* Floating color button above the timeline strip */
+  .tv-fab { bottom: 84px; right: 16px; }
+  .tv-colorpop { bottom: 148px !important; }
+  .tv-toasts { bottom: 150px; }
+}
+
 @media (max-width: 767px) {
   html, body { overscroll-behavior: none; touch-action: manipulation; }
   .toonvo { grid-template-rows: 48px 1fr; }
