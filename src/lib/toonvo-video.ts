@@ -295,3 +295,27 @@ export function downloadBlob(blob: Blob, filename: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/** Share a file via the native share sheet; falls back to download. */
+export async function shareOrDownload(
+  blob: Blob,
+  filename: string,
+  opts: { title?: string; text?: string; preferShare?: boolean } = {},
+): Promise<"shared" | "downloaded"> {
+  const { title = "My TOONVO Animation", text = "Made with TOONVO", preferShare = false } = opts;
+  if (preferShare && typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    try {
+      const file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
+      const data: ShareData = { files: [file], title, text };
+      if (!navigator.canShare || navigator.canShare(data)) {
+        await navigator.share(data);
+        return "shared";
+      }
+    } catch (e) {
+      // user cancelled → don't fall back to a surprise download
+      if ((e as Error)?.name === "AbortError") return "shared";
+    }
+  }
+  downloadBlob(blob, filename);
+  return "downloaded";
+}
