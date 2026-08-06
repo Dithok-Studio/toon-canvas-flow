@@ -211,12 +211,16 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
     const ctx = c.getContext("2d")!;
     let last: Blob | null = null;
     let lastName = "";
+    const batch: File[] = [];
     for (const i of list) {
       drawFrame(ctx, frames[i], dims.w, dims.h);
       if (wmConfig) drawWatermark(ctx, dims.w, dims.h, wmConfig);
       const blob: Blob = await new Promise(r => c.toBlob(b => r(b!), "image/png")!);
       lastName = `${baseName}-frame-${String(i + 1).padStart(3, "0")}.png`;
-      if (pngAll) downloadBlob(blob, lastName);
+      if (pngAll) {
+        if (canShare) batch.push(new File([blob], lastName, { type: "image/png" }));
+        else downloadBlob(blob, lastName);
+      }
       last = blob;
       setProgress({ i: i + 1, n: list.length });
       await new Promise(r => setTimeout(r, 0));
@@ -225,9 +229,12 @@ export default function ExportModal({ frames, dims, fps, projectName, audio, onC
       if (pngAll) {
         const url = URL.createObjectURL(last);
         setResult({ blob: last, name: `${list.length} PNG files`, url, fallback: false });
-      } else finish(last, lastName);
+        pngBatchRef.current = batch.length ? batch : null;
+        if (batch.length) await sharePngBatch(batch);
+      } else { pngBatchRef.current = null; finish(last, lastName); }
     }
     setBusy(false);
+
   };
 
   const run = () => {
