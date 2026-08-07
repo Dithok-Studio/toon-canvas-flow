@@ -588,3 +588,52 @@ input[type="text"], input[type="number"], input[type="color"], select {
   border: 1px solid rgba(255,255,255,.12);
   color: inherit; border-radius: 8px; padding: 6px 8px; font: inherit;
 }
+
+/* ---------- Mobile / tablet colour picker ---------- */
+.tv-fab {
+  position: fixed; right: 16px; bottom: 80px;
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 2px solid #6c63ff; padding: 0;
+  z-index: 9999;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55);
+}
+.tv-topswatch {
+  width: 32px; min-width: 32px; height: 32px; padding: 0;
+  border-radius: 8px; border: 2px solid #6c63ff;
+}
+.tv-colorscrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9997; }
+.tv-colorpop {
+  position: fixed; z-index: 9998;
+  right: 12px; bottom: 148px; left: 12px;
+  max-height: 68vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid #6c63ff; border-radius: 14px;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.6);
+  overscroll-behavior: contain;
+}
+.tv-cphead { display: flex; align-items: center; justify-content: space-between; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.tv-cphead .tv-x { width: 32px; height: 32px; border-radius: 50%; padding: 0; }
+.tv-cpwheelrow { display: flex; justify-content: center; }
+.tv-wheel { display: flex; flex-direction: column; gap: 8px; }
+.tv-wheelknob {
+  position: absolute; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6);
+  transform: translate(-50%, -50%); pointer-events: none;
+}
+.tv-wheelbright { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+.tv-wheelbright input[type="range"] { width: 100%; }
+.tv-cpswaprow { display: flex; align-items: center; gap: 8px; }
+.tv-cpswaprow .sw { width: 34px; height: 34px; border-radius: 8px; border: 2px solid var(--line); }
+.tv-cpswaprow button { min-width: 40px; height: 34px; }
+.tv-cpswaprow .hex { flex: 1; min-width: 0; height: 34px; }
+.tv-colorpop .rgb label { font-size: 11px; }
+.tv-colorpop .rgb label input[type="range"] { flex: 1; }
+.tv-cpsection { display: flex; flex-direction: column; gap: 6px; }
+.tv-cprecent { display: flex; flex-wrap: wrap; gap: 8px; }
+.tv-cpdot { width: 32px; height: 32px; border-radius: 50%; padding: 0; border: 1px solid var(--line); }
+.tv-cpdot.sm { width: 28px; height: 28px; }
+.tv-cppalettes { gap: 10px; }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tv-colorpop { left: auto; width: 340px; bottom: 152px; right: 16px; }
+}
