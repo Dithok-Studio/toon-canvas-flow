@@ -65,10 +65,6 @@ export default function ColorWheel({ color, onChange, size = 220 }: Props) {
       ctx.fill();
     }
     // saturation falloff towards centre
-    const g = ctx.createRadialGradient(r, r, 0, r, r, r - 1);
-    const white = hsvToHex(0, 0, v || 1);
-    g.addColorStop(0, white);
-    g.addColorStop(1, white.replace("#", "rgba(").length ? `${white}00` : white);
     ctx.globalCompositeOperation = "source-atop";
     const g2 = ctx.createRadialGradient(r, r, 0, r, r, r - 1);
     g2.addColorStop(0, "rgba(255,255,255,1)");
