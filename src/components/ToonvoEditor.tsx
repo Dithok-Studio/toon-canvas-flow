@@ -8,6 +8,7 @@ import {
 } from "@/lib/toonvo-db";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
 import ExportModal from "@/components/ExportModal";
+import ColorWheel from "@/components/ColorWheel";
 import {
   maskFromPath,
   maskBBox,
@@ -2608,6 +2609,13 @@ export default function ToonvoEditor() {
             <button onClick={undo} disabled={history.length === 0} title="Undo">↩</button>
             <button onClick={redo} disabled={redoStack.length === 0} title="Redo">↪</button>
             <button onClick={saveNow} title="Save">💾</button>
+            <button
+              className="tv-topswatch"
+              style={{ background: color }}
+              title={`Current color ${color}`}
+              aria-label={`Current color ${color}, open color picker`}
+              onClick={() => setColorPopup(v => !v)}
+            />
             {isTablet && <button className="primary" onClick={() => setShowExport(true)} title="Export">⬆ Export</button>}
             <button onClick={() => setMobileMore(v => !v)} title="More">⋮</button>
           </div>
@@ -3285,20 +3293,73 @@ export default function ToonvoEditor() {
       {isTouchLayout && (
 
         <>
-          <button className="tv-fab" style={{ background: color }} title="Color" aria-label="Color picker" onClick={() => setColorPopup(v => !v)} />
+          <button
+            className="tv-fab"
+            style={{ background: color }}
+            title="Color"
+            aria-label="Color picker"
+            onClick={() => setColorPopup(v => !v)}
+          />
           {colorPopup && (
-            <div className="tv-colorpop">
-              <input type="color" value={color} onChange={e => updateColor(e.target.value)} className="bigcolor" />
-              <input type="text" className="hex" value={color} onChange={e => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && updateColor(e.target.value)} />
-              <div className="recent">{recentColors.slice(0, 10).map((c, i) => <div key={i} className="rc" style={{ background: c }} onClick={() => updateColor(c)} />)}</div>
-              <label style={{ fontSize: 11, display: "block" }}>Opacity {Math.round(opacity * 100)}%
-                <input type="range" min={5} max={100} value={Math.round(opacity * 100)} onChange={e => setOpacity(+e.target.value / 100)} style={{ width: "100%" }} />
-              </label>
-              <label style={{ fontSize: 11, display: "block" }}>Size {size}px
-                <input type="range" min={1} max={200} value={size} onChange={e => setSize(+e.target.value)} style={{ width: "100%" }} />
-              </label>
-              <button onClick={() => setColorPopup(false)} style={{ width: "100%" }}>Close</button>
-            </div>
+            <>
+              <div className="tv-colorscrim" onClick={() => setColorPopup(false)} />
+              <div className="tv-colorpop" role="dialog" aria-label="Color picker">
+                <div className="tv-cphead">
+                  <span>Color</span>
+                  <button className="tv-x" aria-label="Close color picker" onClick={() => setColorPopup(false)}>✕</button>
+                </div>
+                <div className="tv-cpwheelrow">
+                  <ColorWheel color={color} onChange={updateColor} size={200} />
+                </div>
+                <div className="tv-cpswaprow">
+                  <div className="sw" style={{ background: color }} title="Foreground" />
+                  <button onClick={() => { const t = color; setColor(bgColor); setBgColor(t); }} title="Swap foreground/background">⇄</button>
+                  <div className="sw" style={{ background: bgColor }} title="Background" onClick={() => updateColor(bgColor)} />
+                  <input
+                    type="text" className="hex" value={color}
+                    onChange={e => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && updateColor(e.target.value)}
+                  />
+                </div>
+                <div className="rgb">
+                  {(["r", "g", "b"] as const).map((ch, i) => {
+                    const rgb = hexToRgb(color);
+                    return (
+                      <label key={ch}>{ch.toUpperCase()} <b>{rgb[i]}</b>
+                        <input type="range" min={0} max={255} value={rgb[i]} onChange={e => {
+                          const rr = hexToRgb(color); rr[i] = +e.target.value;
+                          updateColor(rgbToHex(rr[0], rr[1], rr[2]));
+                        }} />
+                      </label>
+                    );
+                  })}
+                  <label>Opacity <b>{Math.round(opacity * 100)}%</b>
+                    <input type="range" min={5} max={100} value={Math.round(opacity * 100)} onChange={e => setOpacity(+e.target.value / 100)} />
+                  </label>
+                </div>
+                {recentColors.length > 0 && (
+                  <div className="tv-cpsection">
+                    <div className="palname">Recent</div>
+                    <div className="tv-cprecent">
+                      {recentColors.slice(0, 10).map((c, i) => (
+                        <button key={i} className="tv-cpdot" style={{ background: c }} aria-label={`Recent color ${c}`} onClick={() => updateColor(c)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="tv-cpsection tv-cppalettes">
+                  {Object.entries(PALETTES).map(([name, cols]) => (
+                    <div key={name} className="pal">
+                      <div className="palname">{name}</div>
+                      <div className="tv-cprecent">
+                        {cols.map(c => (
+                          <button key={c} className="tv-cpdot sm" style={{ background: c }} aria-label={`${name} ${c}`} onClick={() => updateColor(c)} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </>
       )}
