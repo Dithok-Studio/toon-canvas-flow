@@ -328,6 +328,14 @@ export default function ToonvoEditor() {
   const [starPoints, setStarPoints] = useState(5);
   const [starInnerRatio, setStarInnerRatio] = useState(0.5);
 
+  // Dreamy blur effect state
+  const [dreamyBlurEnabled, setDreamyBlurEnabled] = useState(false);
+  const [blurRadius, setBlurRadius] = useState(5);
+  const [glowIntensity, setGlowIntensity] = useState(50);
+  const [hazeOpacity, setHazeOpacity] = useState(30);
+  const [warmth, setWarmth] = useState(0);
+  const [vignette, setVignette] = useState(20);
+
   // Text tool state
   const [textFont, setTextFont] = useState("Arial");
   const [textSize, setTextSize] = useState(48);
@@ -697,11 +705,6 @@ export default function ToonvoEditor() {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
-    // Floating selection (drawn above layers)
-    if (floating) {
-      ctx.drawImage(floating.canvas, floating.x, floating.y);
-    }
-
     if (showGrid) {
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 1 / scale;
@@ -714,37 +717,7 @@ export default function ToonvoEditor() {
       }
     }
 
-    // Marching-ants selection border (rect or lasso, or floating bbox)
-    const drawSelPath = (s: Selection) => {
-      ctx.beginPath();
-      if (s.kind === "rect") ctx.rect(s.x, s.y, s.w, s.h);
-      else if (s.kind === "mask") ctx.rect(s.bbox.x, s.bbox.y, s.bbox.w, s.bbox.h);
-      else {
-        const p = s.points;
-        if (p.length) {
-          ctx.moveTo(p[0].x, p[0].y);
-          for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
-          ctx.closePath();
-        }
-      }
-    };
-    const antsFor: Selection | null = selection
-      ? selection
-      : floating
-        ? { kind: "rect", x: floating.x, y: floating.y, w: floating.canvas.width, h: floating.canvas.height }
-        : null;
-    if (antsFor) {
-      ctx.save();
-      ctx.lineWidth = Math.max(1, 1.5 / scale);
-      ctx.setLineDash([6 / scale, 4 / scale]);
-      ctx.lineDashOffset = -dashOffsetRef.current / scale;
-      ctx.strokeStyle = "#000";
-      drawSelPath(antsFor); ctx.stroke();
-      ctx.lineDashOffset = (-dashOffsetRef.current + 5) / scale;
-      ctx.strokeStyle = "#fff";
-      drawSelPath(antsFor); ctx.stroke();
-      ctx.restore();
-    }
+
 
     // Ruler / guide overlay (never exported — display canvas only)
     if (ruler.type !== "none") {
@@ -804,7 +777,68 @@ export default function ToonvoEditor() {
     ctx.strokeStyle = "#6c63ff";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, dims.w, dims.h);
-  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, selection, floating, ruler]);
+
+    // Apply dreamy blur effect if enabled (post-processing on display canvas)
+    if (dreamyBlurEnabled) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      
+      // Create a temporary canvas for effect processing
+      const tempCanvas = makeCanvas(pw, ph);
+      const tempCtx = tempCanvas.getContext("2d")!;
+      tempCtx.drawImage(disp, 0, 0);
+      
+      // Apply blur
+      if (blurRadius > 0) {
+        ctx.filter = `blur(${blurRadius * dpr}px)`;
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.filter = "none";
+      }
+      
+      // Apply glow intensity
+      if (glowIntensity > 0) {
+        ctx.globalAlpha = glowIntensity / 100;
+        ctx.globalCompositeOperation = "screen";
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+      
+      // Apply haze overlay
+      if (hazeOpacity > 0) {
+        ctx.globalAlpha = hazeOpacity / 100;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.fillRect(0, 0, pw, ph);
+        ctx.globalAlpha = 1;
+      }
+      
+      // Apply warmth (color temperature)
+      if (warmth !== 0) {
+        ctx.globalCompositeOperation = warmth > 0 ? "overlay" : "color";
+        ctx.globalAlpha = Math.abs(warmth) / 100;
+        ctx.fillStyle = warmth > 0 ? "rgba(255, 200, 150, 0.5)" : "rgba(150, 200, 255, 0.5)";
+        ctx.fillRect(0, 0, pw, ph);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+      
+      // Apply vignette
+      if (vignette > 0) {
+        const gradient = ctx.createRadialGradient(
+          pw / 2, ph / 2, 0,
+          pw / 2, ph / 2, Math.max(pw, ph) / 1.5
+        );
+        gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+        gradient.addColorStop(1, `rgba(0, 0, 0, ${vignette / 100})`);
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, pw, ph);
+        ctx.globalCompositeOperation = "source-over";
+      }
+      
+      ctx.restore();
+    }
+  }, [frames, currentFrame, dims, zoom, pan, onion, onionBefore, onionAfter, onionOpacity, showGrid, ruler, dreamyBlurEnabled, blurRadius, glowIntensity, hazeOpacity, warmth, vignette]);
 
 
   // Resize observer
@@ -3200,6 +3234,75 @@ export default function ToonvoEditor() {
               </div>
             ) : (
               <button onClick={() => bgFileRef.current?.click()} style={{ width: "100%" }}>Import Background Image</button>
+            )}
+          </section>
+
+          {/* Effects */}
+          <section className="panel">
+            <h3>Effects</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={dreamyBlurEnabled}
+                  onChange={(e) => setDreamyBlurEnabled(e.target.checked)}
+                />
+                <span>Dreamy Blur</span>
+              </label>
+            </div>
+            {dreamyBlurEnabled && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <label>
+                  Blur Radius <span>{blurRadius}px</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={30}
+                    value={blurRadius}
+                    onChange={(e) => setBlurRadius(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  Glow Intensity <span>{glowIntensity}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={glowIntensity}
+                    onChange={(e) => setGlowIntensity(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  Haze Opacity <span>{hazeOpacity}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={80}
+                    value={hazeOpacity}
+                    onChange={(e) => setHazeOpacity(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  Warmth <span>{warmth > 0 ? `+${warmth}` : warmth}</span>
+                  <input
+                    type="range"
+                    min={-50}
+                    max={50}
+                    value={warmth}
+                    onChange={(e) => setWarmth(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  Vignette <span>{vignette}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={vignette}
+                    onChange={(e) => setVignette(+e.target.value)}
+                  />
+                </label>
+              </div>
             )}
           </section>
         </aside>
