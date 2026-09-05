@@ -276,6 +276,20 @@ function rgbToHex(r: number, g: number, b: number) {
   return "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
 }
 
+function mixHex(a: string, b: string, amount: number) {
+  const ac = hexToRgb(a), bc = hexToRgb(b);
+  return rgbToHex(
+    ac[0] + (bc[0] - ac[0]) * amount,
+    ac[1] + (bc[1] - ac[1]) * amount,
+    ac[2] + (bc[2] - ac[2]) * amount,
+  );
+}
+
+function rgba(hex: string, alpha: number) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, alpha))})`;
+}
+
 function blendCss(b: BlendMode): GlobalCompositeOperation {
   if (b === "add") return "lighter";
   if (b === "normal") return "source-over";
@@ -331,6 +345,7 @@ export default function ToonvoEditor() {
   const [smoothing, setSmoothing] = useState(3);
   const [hardness, setHardness] = useState(0.8);
   const [flow, setFlow] = useState(1);
+  const [natureExpanded, setNatureExpanded] = useState(true);
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [shapeStyle, setShapeStyle] = useState<"fill" | "stroke" | "both">("stroke");
   const [shapeFill, setShapeFill] = useState("#6c63ff");
