@@ -1410,9 +1410,132 @@ export default function ToonvoEditor() {
     ctx.restore();
   };
 
+  const drawNatureStamp = (ctx: CanvasRenderingContext2D, t: Tool, x: number, y: number) => {
+    const s = Math.max(2, size);
+    const a = Math.max(0, Math.min(1, opacity));
+    const jitter = (amount: number) => (Math.random() - 0.5) * amount;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (t === "grass") {
+      const blades = Math.max(4, Math.round(s / 2));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, s * 0.055);
+      ctx.globalAlpha = a * 0.82;
+      for (let i = 0; i < blades; i++) {
+        const bx = x + jitter(s * 0.8);
+        const baseY = y + jitter(s * 0.18);
+        const height = s * (0.55 + Math.random() * 0.85);
+        const lean = jitter(s * 0.55);
+        ctx.beginPath();
+        ctx.moveTo(bx, baseY);
+        ctx.quadraticCurveTo(bx + lean * 0.35, baseY - height * 0.55, bx + lean, baseY - height);
+        ctx.stroke();
+      }
+    } else if (t === "tree") {
+      const scale = 0.9 + Math.random() * 0.2;
+      const trunk = mixHex(color, "#26170f", 0.45);
+      const leaf = color;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = trunk;
+      ctx.beginPath();
+      ctx.moveTo(x - s * 0.08 * scale, y + s * 0.5 * scale);
+      ctx.lineTo(x - s * 0.16 * scale, y - s * 0.08 * scale);
+      ctx.lineTo(x - s * 0.05 * scale, y - s * 0.08 * scale);
+      ctx.lineTo(x + s * 0.12 * scale, y + s * 0.5 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = trunk;
+      ctx.lineWidth = Math.max(1, s * 0.065 * scale);
+      [[0, -0.05, -0.3, -0.45], [0, -0.12, 0.28, -0.4], [-0.02, -0.28, -0.2, -0.62], [0.04, -0.25, 0.2, -0.64]].forEach(([sx, sy, ex, ey]) => {
+        ctx.beginPath(); ctx.moveTo(x + sx * s, y + sy * s); ctx.lineTo(x + ex * s, y + ey * s); ctx.stroke();
+      });
+      ctx.fillStyle = leaf;
+      [[-0.25, -0.5, 0.28], [0.12, -0.55, 0.34], [-0.02, -0.8, 0.34], [0.3, -0.75, 0.23], [-0.3, -0.77, 0.22]].forEach(([dx, dy, r]) => {
+        ctx.beginPath(); ctx.arc(x + dx * s * scale, y + dy * s * scale, r * s * scale, 0, Math.PI * 2); ctx.fill();
+      });
+    } else if (t === "flower") {
+      const count = Math.max(2, Math.round(s / 8));
+      const petal = color;
+      const center = mixHex(color, "#241b10", 0.35);
+      ctx.globalAlpha = a * 0.9;
+      for (let i = 0; i < count; i++) {
+        const fx = x + jitter(s * 0.9), fy = y + jitter(s * 0.7);
+        const r = Math.max(1.5, s * (0.1 + Math.random() * 0.08));
+        const rot = Math.random() * Math.PI * 2;
+        ctx.save(); ctx.translate(fx, fy); ctx.rotate(rot); ctx.fillStyle = petal;
+        for (let p = 0; p < 5; p++) {
+          const pa = p * Math.PI * 2 / 5;
+          ctx.beginPath(); ctx.ellipse(Math.cos(pa) * r * 0.72, Math.sin(pa) * r * 0.72, r * 0.65, r * 0.38, pa, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = center; ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    } else if (t === "cloud" || t === "smoke") {
+      const cloudColor = t === "cloud" ? mixHex(color, "#ffffff", 0.72) : "#a7a9b5";
+      const cloudAlpha = t === "cloud" ? a * 0.36 : a * 0.22;
+      const puffs = t === "cloud" ? 5 : 4;
+      for (let i = 0; i < puffs; i++) {
+        const px = x + jitter(s * 0.75), py = y + jitter(s * 0.38);
+        const r = s * (0.28 + Math.random() * 0.28);
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
+        grad.addColorStop(0, rgba(cloudColor, cloudAlpha));
+        grad.addColorStop(0.65, rgba(cloudColor, cloudAlpha * 0.6));
+        grad.addColorStop(1, rgba(cloudColor, 0));
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (t === "snow") {
+      const count = Math.max(2, Math.round(s / 10));
+      ctx.strokeStyle = mixHex("#ffffff", "#bceaff", 0.5);
+      ctx.lineWidth = Math.max(1, s * 0.035);
+      ctx.globalAlpha = a * 0.75;
+      for (let i = 0; i < count; i++) {
+        const sx = x + jitter(s), sy = y + jitter(s);
+        const r = s * (0.08 + Math.random() * 0.1);
+        const rot = Math.random() * Math.PI / 3;
+        for (let ray = 0; ray < 6; ray++) {
+          const ang = rot + ray * Math.PI / 3;
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(ang) * r, sy + Math.sin(ang) * r); ctx.stroke();
+        }
+      }
+    } else if (t === "rain") {
+      ctx.strokeStyle = "#9ddcff";
+      ctx.lineWidth = Math.max(1, s * 0.035);
+      ctx.globalAlpha = a * 0.42;
+      const count = Math.max(3, Math.round(s / 5));
+      const angle = (72 + Math.random() * 8) * Math.PI / 180;
+      for (let i = 0; i < count; i++) {
+        const rx = x + jitter(s), ry = y + jitter(s);
+        const len = s * (0.55 + Math.random() * 0.65);
+        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + Math.cos(angle) * len, ry + Math.sin(angle) * len); ctx.stroke();
+      }
+    } else if (t === "fire") {
+      const h = s * (0.8 + Math.random() * 0.65);
+      const w = s * (0.38 + Math.random() * 0.25);
+      const grad = ctx.createLinearGradient(x, y + h * 0.45, x, y - h);
+      grad.addColorStop(0, rgba("#ff2d18", a * 0.62));
+      grad.addColorStop(0.55, rgba("#ff8a00", a * 0.78));
+      grad.addColorStop(1, rgba("#ffe45c", a * 0.24));
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.moveTo(x - w, y + h * 0.45); ctx.quadraticCurveTo(x - w * 0.78, y - h * 0.1, x - w * 0.1, y - h * 0.35); ctx.quadraticCurveTo(x - w * 0.16, y - h * 0.78, x + w * 0.1, y - h); ctx.quadraticCurveTo(x + w * 0.2, y - h * 0.45, x + w * 0.8, y - h * 0.62); ctx.quadraticCurveTo(x + w * 0.72, y - h * 0.08, x + w, y + h * 0.45); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  const isNatureTool = (t: Tool) => ["grass", "tree", "flower", "cloud", "snow", "rain", "fire", "smoke"].includes(t);
+
   const drawStrokeSegment = (
     ctx: CanvasRenderingContext2D, t: Tool, x0: number, y0: number, x1: number, y1: number, pressure: number
   ) => {
+    if (isNatureTool(t)) {
+      const d = Math.hypot(x1 - x0, y1 - y0);
+      const spacing = Math.max(3, size * (t === "tree" ? 1.15 : t === "flower" ? 0.45 : 0.35));
+      const steps = Math.max(1, Math.ceil(d / spacing));
+      for (let i = 0; i <= steps; i++) drawNatureStamp(ctx, t, x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps);
+      return;
+    }
     applyStrokeStyle(ctx, t, pressure);
     if (t === "airbrush") {
       const dx = x1 - x0, dy = y1 - y0;
