@@ -71,7 +71,8 @@ type Tool =
   | "pen" | "pencil" | "brush" | "marker" | "airbrush" | "ink" | "crayon" | "charcoal"
   | "eraserHard" | "eraserSoft" | "eraserStroke"
   | "bucket" | "rect" | "ellipse" | "line" | "polygon" | "star"
-  | "select" | "lasso" | "magicwand" | "move" | "eyedropper" | "text";
+  | "select" | "lasso" | "magicwand" | "move" | "eyedropper" | "text"
+  | "grass" | "tree" | "flower" | "cloud" | "snow" | "rain" | "fire" | "smoke";
 
 type Selection =
   | { kind: "rect"; x: number; y: number; w: number; h: number }
@@ -196,6 +197,16 @@ const TOOL_GROUPS: { title: string; tools: { id: Tool; label: string; key?: stri
     { id: "lasso", label: "Lasso", icon: "🪢" },
     { id: "move", label: "Pan", key: "V", icon: "✥" },
     { id: "eyedropper", label: "Eyedropper", icon: "💧" },
+  ]},
+  { title: "NATURE", tools: [
+    { id: "grass", label: "Grass Brush", icon: "🌿" },
+    { id: "tree", label: "Tree Brush", icon: "🌳" },
+    { id: "flower", label: "Flower Brush", icon: "🌸" },
+    { id: "cloud", label: "Cloud Brush", icon: "☁️" },
+    { id: "snow", label: "Snow Brush", icon: "❄️" },
+    { id: "rain", label: "Rain Brush", icon: "🌧️" },
+    { id: "fire", label: "Fire Brush", icon: "🔥" },
+    { id: "smoke", label: "Smoke Brush", icon: "💨" },
   ]},
 ];
 
