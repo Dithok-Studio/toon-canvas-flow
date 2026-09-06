@@ -2839,7 +2839,7 @@ export default function ToonvoEditor() {
               <label><input type="checkbox" checked={wandContiguous} onChange={e => setWandContiguous(e.target.checked)} /> Contiguous</label>
             </>
           )}
-          {["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft","bucket"].includes(tool) && (
+          {(["pen","pencil","brush","marker","airbrush","ink","crayon","charcoal","eraserHard","eraserSoft","bucket"].includes(tool) || isNatureTool(tool)) && (
             <>
               <label>Size <input type="range" min={1} max={300} value={size} onChange={e => setSize(+e.target.value)} /><input className="num" type="number" value={size} onChange={e => setSize(+e.target.value)} /></label>
               <label>Opacity <input type="range" min={0} max={100} value={Math.round(opacity*100)} onChange={e => setOpacity(+e.target.value/100)} /><span style={{ minWidth: 30 }}>{Math.round(opacity*100)}%</span></label>
