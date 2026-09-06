@@ -1420,18 +1420,21 @@ export default function ToonvoEditor() {
     ctx.lineJoin = "round";
 
     if (t === "grass") {
-      const blades = Math.max(4, Math.round(s / 2));
+      const blades = 5 + Math.floor(Math.random() * 11);
+      const scale = Math.max(0.25, s / 8);
+      const groundWidth = Math.max(2, s * 0.8);
+      const baseY = y + s * 0.06;
       ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(1, s * 0.055);
-      ctx.globalAlpha = a * 0.82;
+      ctx.lineWidth = Math.max(0.75, s * 0.045);
+      ctx.globalAlpha = a;
       for (let i = 0; i < blades; i++) {
-        const bx = x + jitter(s * 0.8);
-        const baseY = y + jitter(s * 0.18);
-        const height = s * (0.55 + Math.random() * 0.85);
-        const lean = jitter(s * 0.55);
+        const bx = x + (i / Math.max(1, blades - 1) - 0.5) * groundWidth;
+        const height = (10 + Math.random() * 20) * scale;
+        const lean = jitter(Math.max(2, s * 0.55));
+        const curve = jitter(Math.max(1, s * 0.3));
         ctx.beginPath();
         ctx.moveTo(bx, baseY);
-        ctx.quadraticCurveTo(bx + lean * 0.35, baseY - height * 0.55, bx + lean, baseY - height);
+        ctx.quadraticCurveTo(bx + curve, baseY - height * 0.52, bx + lean, baseY - height);
         ctx.stroke();
       }
     } else if (t === "tree") {
