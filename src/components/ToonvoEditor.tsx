@@ -233,6 +233,14 @@ const MOBILE_TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "line", label: "Line", icon: "／" },
   { id: "polygon", label: "Polygon", icon: "⬡" },
   { id: "star", label: "Star", icon: "★" },
+  { id: "grass", label: "Grass Brush", icon: "🌿" },
+  { id: "tree", label: "Tree Brush", icon: "🌳" },
+  { id: "flower", label: "Flower Brush", icon: "🌸" },
+  { id: "cloud", label: "Cloud Brush", icon: "☁️" },
+  { id: "snow", label: "Snow Brush", icon: "❄️" },
+  { id: "rain", label: "Rain Brush", icon: "🌧️" },
+  { id: "fire", label: "Fire Brush", icon: "🔥" },
+  { id: "smoke", label: "Smoke Brush", icon: "💨" },
 ];
 
 
@@ -3241,6 +3249,22 @@ export default function ToonvoEditor() {
                 <label className="tv-bigslider">Flow <b>{Math.round(flow * 100)}%</b>
                   <input type="range" min={1} max={100} value={Math.round(flow * 100)} onChange={e => setFlow(+e.target.value / 100)} />
                 </label>
+              </section>
+              <section className="panel tv-naturemenu">
+                <h3>🌿 Nature brushes</h3>
+                <div className="tv-menugrid">
+                  {TOOL_GROUPS.find(g => g.title === "NATURE")?.tools.map(t => (
+                    <button
+                      key={t.id}
+                      className={tool === t.id ? "active" : ""}
+                      title={t.label}
+                      aria-label={t.label}
+                      onClick={() => { setTool(t.id); setDrawerOpen(false); showToolPopup(t.id); }}
+                    >
+                      <span aria-hidden="true">{t.icon}</span> {t.label.replace(" Brush", "")}
+                    </button>
+                  ))}
+                </div>
               </section>
               <section className="panel">
                 <h3>🎬 Canvas</h3>
